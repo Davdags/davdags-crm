@@ -269,6 +269,7 @@ function contacts() {
     lead: leads[c.wa_id] || null,
     last: d.last[c.wa_id] || null,
     lastCustomerAt: d.lastCustomerAt[c.wa_id] || null,
+    flagged: (d.flagged || {})[c.wa_id] || null,
     isOwner: c.wa_id === d.owner,
   })).sort((a, b) => new Date(b.last?.created_at || b.created_at) - new Date(a.last?.created_at || a.created_at));
 }
@@ -340,6 +341,7 @@ function filtered() {
     if (state.filter === "leads" && !hasLead(c)) return false;
     if (state.filter === "ads" && source(c.lead) !== "Ad") return false;
     if (state.filter === "unread" && !unread(c)) return false;
+    if (state.filter === "flagged" && !c.flagged) return false;
     if (!q) return true;
     return [c.name, c.wa_id, c.last?.body, c.lead?.name, c.lead?.business_name].some((v) => String(v || "").toLowerCase().includes(q));
   });
@@ -353,8 +355,9 @@ function renderList() {
     need: all.filter((c) => c.handoff).length,
     leads: all.filter(hasLead).length,
     ads: all.filter((c) => source(c.lead) === "Ad").length,
+    flagged: all.filter((c) => c.flagged).length,
   };
-  const labels = { all: "All", unread: "Unread", need: "Needs you", leads: "Leads", ads: "From ads" };
+  const labels = { all: "All", unread: "Unread", need: "Needs you", leads: "Leads", ads: "From ads", flagged: "⚠ Flagged" };
   $("#chips").innerHTML = Object.keys(labels).map((k) =>
     `<button class="chip ${state.filter === k ? "on" : ""}" data-filter="${k}">${labels[k]} ${counts[k]}</button>`).join("");
 
@@ -363,6 +366,8 @@ function renderList() {
     const who = c.last?.sender === "ai" ? "Bot: " : c.last?.sender === "human" ? "You: " : "";
     const tags = [
       c.isOwner ? `<span class="tag you">You</span>` : "",
+      c.flagged ? `<span class="tag need">⚠ Flagged</span>` : "",
+      blocked(c) ? `<span class="tag you">Blocked</span>` : "",
       c.handoff ? `<span class="tag need">Needs you</span>` : "",
       source(c.lead) === "Ad" ? `<span class="tag ad">Ad</span>` : "",
       c.lead?.offer ? `<span class="tag lead">${esc(c.lead.offer)}</span>` : "",
@@ -409,8 +414,10 @@ function renderChat() {
           ? `<span class="mode-label human">You're handling this chat</span><button class="btn small primary" data-handoff="0">Hand back to bot</button>`
           : `<span class="mode-label bot">Bot is replying</span><button class="btn small" data-handoff="1">Take over</button>`}
         ${blocked(c) || c.isOwner ? "" : `<button class="btn small" data-block="1" title="Stop this number from messaging you">Block</button>`}
+        <button class="btn small" id="delete-chat" title="Delete this chat from the CRM">Delete</button>
       </div>
     </div>
+    ${c.flagged ? `<div class="lead-card" style="background:var(--danger-soft)"><span class="tag need">⚠ Flagged</span> Sent what looks like a bank account or phone number: “${esc(c.flagged)}”. Real customers rarely do this; it's often someone expecting money. Block or delete if it's not genuine.</div>` : ""}
     ${c.handoff && c.handoff_reason ? `<div class="lead-card"><span class="tag need">Why</span> ${esc(c.handoff_reason)}</div>` : ""}
     <details class="lead-card" ${leadOpen ? "open" : ""}>
       <summary>Lead details <span class="status ${esc(l.status || "new")}">${esc(STATUS[l.status] || "New")}</span> <span class="chat-sub">· ${esc(source(c.lead))}</span></summary>
@@ -597,6 +604,20 @@ async function setBlocked(block) {
   } catch (e) { if (e.message !== "unauthorized") alert(e.message); }
 }
 
+async function deleteChat() {
+  const id = state.open;
+  const c = contacts().find((x) => x.wa_id === id);
+  const who = c?.lead?.name || c?.name || fmtPhone(id);
+  if (!confirm(`Delete the chat with ${who}? All their messages and lead details are removed from the CRM for good. (It doesn't block them; use Block for that.)`)) return;
+  try {
+    await api("delete", { method: "POST", body: JSON.stringify({ wa_id: id }) });
+    state.open = null;
+    delete state.draft[id];
+    await loadOverview();
+    render();
+  } catch (e) { if (e.message !== "unauthorized") alert(e.message); }
+}
+
 async function saveLead() {
   const msg = $("#lead-msg");
   msg.textContent = "Saving…";
@@ -623,7 +644,7 @@ function exportCsv() {
 }
 
 document.addEventListener("click", (e) => {
-  const t = e.target.closest("[data-view],[data-filter],[data-open],[data-open-lead],[data-handoff],[data-block],[data-lstatus],#back,#send,#lead-save,#export,#logout");
+  const t = e.target.closest("[data-view],[data-filter],[data-open],[data-open-lead],[data-handoff],[data-block],[data-lstatus],#back,#send,#lead-save,#export,#logout,#delete-chat");
   if (!t) return;
   if (t.dataset.view) { state.view = t.dataset.view; store.set("crm_view", state.view); $("#main").innerHTML = ""; render(); }
   else if (t.dataset.filter) { state.filter = t.dataset.filter; renderList(); }
@@ -636,6 +657,7 @@ document.addEventListener("click", (e) => {
   else if (t.id === "send") send();
   else if (t.id === "lead-save") saveLead();
   else if (t.id === "export") exportCsv();
+  else if (t.id === "delete-chat") deleteChat();
   else if (t.id === "logout") logout();
 });
 

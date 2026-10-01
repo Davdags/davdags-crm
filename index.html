@@ -1,0 +1,677 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>DavDags CRM</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2316a34a'/%3E%3Ctext x='16' y='22' font-family='Arial' font-weight='700' font-size='16' text-anchor='middle' fill='white'%3ED%3C/text%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #f4f5f7; --panel: #ffffff; --panel-2: #f8f9fa; --line: #e3e6ea;
+  --text: #15181c; --muted: #66707b; --accent: #16a34a; --accent-ink: #ffffff; --accent-soft: #dcfce7;
+  --warn: #b45309; --warn-soft: #fef3c7; --danger: #b91c1c; --danger-soft: #fee2e2;
+  --info: #1d4ed8; --info-soft: #dbeafe;
+  --bubble-in: #ffffff; --bubble-ai: #e7f8ec; --bubble-human: #e3ecff; --chat-bg: #eef0f2;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1214; --panel: #171b1f; --panel-2: #1d2226; --line: #2a3036;
+    --text: #e8eaed; --muted: #97a1ab; --accent: #22c55e; --accent-ink: #06210f; --accent-soft: #14361f;
+    --warn: #fbbf24; --warn-soft: #3a2e10; --danger: #f87171; --danger-soft: #3b1414;
+    --info: #93b4ff; --info-soft: #18264a;
+    --bubble-in: #20262b; --bubble-ai: #173a24; --bubble-human: #1c2c52; --chat-bg: #111518;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+.hidden { display: none !important; }
+
+/* Login */
+#login { min-height: 100%; display: grid; place-items: center; padding: 16px; }
+.login-card { width: 100%; max-width: 360px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 28px 24px; }
+.login-card h1 { margin: 0 0 4px; font-size: 22px; }
+.login-card p { margin: 0 0 18px; color: var(--muted); }
+.field { width: 100%; padding: 11px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel-2); }
+.btn { border: 1px solid var(--line); background: var(--panel); border-radius: 10px; padding: 8px 14px; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+.btn.small { padding: 5px 10px; font-size: 13px; }
+.btn:disabled { opacity: .55; cursor: not-allowed; }
+.error { color: var(--danger); margin-top: 10px; min-height: 1.2em; font-size: 14px; }
+
+/* Shell */
+#app { height: 100%; display: flex; flex-direction: column; }
+header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.brand { font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.brand-mark { width: 26px; height: 26px; border-radius: 7px; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-size: 14px; }
+nav.tabs { display: flex; gap: 4px; margin-left: 12px; }
+nav.tabs button { border: 0; background: none; padding: 7px 12px; border-radius: 8px; color: var(--muted); font-weight: 600; }
+nav.tabs button.on { background: var(--accent-soft); color: var(--text); }
+.count { display: inline-block; min-width: 18px; padding: 0 5px; margin-left: 4px; border-radius: 9px; background: var(--danger); color: #fff; font-size: 11px; line-height: 18px; text-align: center; }
+.header-right { margin-left: auto; display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; }
+main { flex: 1; min-height: 0; }
+
+/* Inbox */
+.inbox { height: 100%; display: grid; grid-template-columns: 360px 1fr; }
+.list-pane { border-right: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
+.list-tools { padding: 10px 12px; border-bottom: 1px solid var(--line); display: grid; gap: 8px; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 3px 11px; font-size: 13px; }
+.chip.on { background: var(--text); color: var(--panel); border-color: var(--text); }
+.chat-list { overflow-y: auto; flex: 1; }
+.row { display: grid; grid-template-columns: 40px 1fr auto; gap: 10px; padding: 11px 12px; border-bottom: 1px solid var(--line); cursor: pointer; align-items: center; }
+.row:hover { background: var(--panel-2); }
+.row.on { background: var(--accent-soft); }
+.avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--panel-2); border: 1px solid var(--line); display: grid; place-items: center; font-weight: 700; color: var(--muted); }
+.row-main { min-width: 0; }
+.row-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row-last { color: var(--muted); font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row-side { text-align: right; font-size: 12px; color: var(--muted); display: grid; gap: 4px; justify-items: end; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+.tag { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 6px; margin-right: 4px; white-space: nowrap; }
+.tag.need { background: var(--danger-soft); color: var(--danger); }
+.tag.ad { background: var(--info-soft); color: var(--info); }
+.tag.lead { background: var(--accent-soft); color: var(--text); }
+.tag.you { background: var(--warn-soft); color: var(--warn); }
+.empty { padding: 40px 20px; text-align: center; color: var(--muted); }
+
+.chat-pane { display: flex; flex-direction: column; min-height: 0; background: var(--chat-bg); }
+.chat-head { background: var(--panel); border-bottom: 1px solid var(--line); padding: 10px 14px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.chat-title { font-weight: 700; }
+.chat-sub { color: var(--muted); font-size: 13px; }
+.chat-sub a { color: inherit; }
+.back { display: none; border: 0; background: none; font-size: 20px; padding: 0 6px 0 0; }
+.mode { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.mode-label { padding: 4px 9px; border-radius: 8px; font-weight: 600; }
+.mode-label.bot { background: var(--accent-soft); }
+.mode-label.human { background: var(--warn-soft); color: var(--warn); }
+.lead-card { background: var(--panel); border-bottom: 1px solid var(--line); padding: 8px 14px; font-size: 13.5px; }
+.lead-card summary { cursor: pointer; font-weight: 600; }
+.lead-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px 16px; margin: 10px 0; }
+.lead-grid div span { display: block; color: var(--muted); font-size: 12px; }
+.lead-edit { display: grid; gap: 8px; }
+.lead-edit textarea { min-height: 60px; resize: vertical; }
+.lead-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.messages { flex: 1; overflow-y: auto; padding: 16px 14px; display: flex; flex-direction: column; gap: 6px; }
+.msg { max-width: min(560px, 82%); padding: 7px 10px 5px; border-radius: 10px; white-space: pre-wrap; word-wrap: break-word; box-shadow: 0 1px 0 rgba(0,0,0,.05); }
+.msg.customer { align-self: flex-start; background: var(--bubble-in); }
+.msg.ai { align-self: flex-end; background: var(--bubble-ai); }
+.msg.human { align-self: flex-end; background: var(--bubble-human); }
+.msg.system { align-self: center; background: var(--panel-2); color: var(--muted); font-size: 13px; }
+.msg-meta { font-size: 11px; color: var(--muted); margin-top: 3px; text-align: right; }
+.day { align-self: center; font-size: 12px; color: var(--muted); background: var(--panel); border-radius: 8px; padding: 2px 10px; margin: 8px 0; }
+.composer { background: var(--panel); border-top: 1px solid var(--line); padding: 10px 12px; display: grid; gap: 8px; }
+.composer-row { display: flex; gap: 8px; align-items: flex-end; }
+.composer textarea { flex: 1; resize: none; min-height: 42px; max-height: 160px; }
+.notice { padding: 8px 10px; border-radius: 8px; font-size: 13px; background: var(--warn-soft); color: var(--warn); }
+.pick { height: 100%; display: grid; place-items: center; color: var(--muted); text-align: center; padding: 20px; }
+
+/* Leads */
+.page { height: 100%; overflow-y: auto; padding: 16px; }
+.page-inner { max-width: 1200px; margin: 0 auto; }
+.page-tools { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+.page-tools .field { max-width: 280px; }
+table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; font-size: 14px; }
+th { font-size: 12px; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); background: var(--panel-2); }
+tr.clickable { cursor: pointer; }
+tr.clickable:hover td { background: var(--panel-2); }
+.status { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 6px; white-space: nowrap; }
+.status.new { background: var(--info-soft); color: var(--info); }
+.status.qualified { background: var(--warn-soft); color: var(--warn); }
+.status.won { background: var(--accent-soft); color: var(--text); }
+.status.lost { background: var(--panel-2); color: var(--muted); }
+
+/* Stats */
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+.card .num { font-size: 28px; font-weight: 700; }
+.card .lbl { color: var(--muted); font-size: 13px; }
+.panels { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 12px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+.panel h3 { margin: 0 0 12px; font-size: 15px; }
+.bars { display: flex; align-items: flex-end; gap: 6px; height: 160px; }
+.bar { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 4px; font-size: 11px; color: var(--muted); }
+.bar i { display: block; width: 100%; background: var(--accent); border-radius: 4px 4px 0 0; min-height: 2px; }
+.hrow { display: grid; grid-template-columns: 1fr auto; gap: 8px; font-size: 14px; margin-bottom: 8px; }
+.hbar { grid-column: 1 / -1; height: 6px; border-radius: 3px; background: var(--panel-2); overflow: hidden; }
+.hbar i { display: block; height: 100%; background: var(--accent); }
+
+@media (max-width: 820px) {
+  header { flex-wrap: wrap; padding: 8px 12px; }
+  nav.tabs { order: 3; width: 100%; margin: 0; }
+  nav.tabs button { flex: 1; }
+  .header-right .updated { display: none; }
+  .inbox { grid-template-columns: 1fr; }
+  .inbox.chat-open .list-pane { display: none; }
+  .inbox:not(.chat-open) .chat-pane { display: none; }
+  .back { display: block; }
+  .mode { margin-left: 0; width: 100%; }
+  .panels { grid-template-columns: 1fr; }
+  .page { padding: 12px; }
+  .hide-sm { display: none; }
+  th, td { padding: 8px 6px; }
+}
+</style>
+</head>
+<body>
+
+<section id="login" class="hidden">
+  <form class="login-card" id="login-form">
+    <h1>DavDags CRM</h1>
+    <p>Your WhatsApp chats and leads.</p>
+    <input class="field" id="password" type="password" placeholder="Password" autocomplete="current-password" required>
+    <div style="height:12px"></div>
+    <button class="btn primary" style="width:100%" type="submit">Log in</button>
+    <div class="error" id="login-error"></div>
+  </form>
+</section>
+
+<section id="app" class="hidden">
+  <header>
+    <div class="brand"><span class="brand-mark">D</span> DavDags CRM</div>
+    <nav class="tabs">
+      <button data-view="inbox">Inbox<span class="count hidden" id="need-count"></span></button>
+      <button data-view="leads">Leads</button>
+      <button data-view="stats">Stats</button>
+    </nav>
+    <div class="header-right">
+      <span class="updated" id="updated"></span>
+      <button class="btn small" id="logout">Log out</button>
+    </div>
+  </header>
+  <main id="main"></main>
+</section>
+
+<script>
+const API = "https://soxevflmqepqbritrpnl.supabase.co/functions/v1/whatsapp/crm/";
+const STATUS = { new: "New", qualified: "Quoted", won: "Paid", lost: "Lost" };
+const LEAD_FIELDS = [
+  ["offer", "Offer"], ["ref", "Came from"], ["name", "Name"], ["email", "Email"], ["business_name", "Business"],
+  ["website_goal", "What they need"], ["budget", "Budget"], ["timeline", "Timeline"],
+];
+
+const store = {
+  get(k, fallback) { try { const v = localStorage.getItem(k); return v === null ? fallback : JSON.parse(v); } catch { return fallback; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+  del(k) { try { localStorage.removeItem(k); } catch {} },
+};
+
+const state = {
+  key: store.get("crm_key", ""),
+  data: null,
+  view: store.get("crm_view", "inbox"),
+  open: null,          // wa_id of the open chat
+  messages: [],
+  filter: "all",
+  q: "",
+  leadQ: "",
+  leadStatus: "all",
+  seen: store.get("crm_seen", {}),
+  draft: {},
+};
+
+// ---------- helpers ----------
+const $ = (s) => document.querySelector(s);
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function fmtPhone(w) { return w ? "+" + w : ""; }
+function initials(name, w) {
+  const n = (name || "").trim();
+  if (!n) return (w || "?").slice(-2);
+  return n.split(/\s+/).slice(0, 2).map((p) => p[0]).join("").toUpperCase();
+}
+function when(iso) {
+  if (!iso) return "";
+  const d = new Date(iso), now = new Date();
+  const days = Math.floor((new Date(now.toDateString()) - new Date(d.toDateString())) / 864e5);
+  if (days === 0) return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  if (days === 1) return "Yesterday";
+  if (days < 7) return d.toLocaleDateString([], { weekday: "short" });
+  return d.toLocaleDateString([], { day: "numeric", month: "short" });
+}
+function dayLabel(iso) {
+  const d = new Date(iso), now = new Date();
+  const days = Math.floor((new Date(now.toDateString()) - new Date(d.toDateString())) / 864e5);
+  if (days === 0) return "Today";
+  if (days === 1) return "Yesterday";
+  return d.toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" });
+}
+function source(lead) {
+  const ref = lead?.ref || "";
+  if (/^AD\b/i.test(ref)) return "Ad";
+  if (ref) return "Link " + ref;
+  return "Direct";
+}
+
+async function api(path, opts = {}) {
+  const res = await fetch(API + path, {
+    ...opts,
+    headers: { "x-crm-key": state.key, ...(opts.body ? { "content-type": "application/json" } : {}) },
+  });
+  const body = await res.json().catch(() => ({}));
+  if (res.status === 401) { logout("Wrong password, please log in again."); throw new Error("unauthorized"); }
+  if (!res.ok) throw new Error(body.error || "Something went wrong (" + res.status + ")");
+  return body;
+}
+
+// ---------- data ----------
+function contacts() {
+  const d = state.data;
+  if (!d) return [];
+  const leads = Object.fromEntries((d.leads || []).map((l) => [l.wa_id, l]));
+  return (d.contacts || []).map((c) => ({
+    ...c,
+    lead: leads[c.wa_id] || null,
+    last: d.last[c.wa_id] || null,
+    lastCustomerAt: d.lastCustomerAt[c.wa_id] || null,
+    isOwner: c.wa_id === d.owner,
+  })).sort((a, b) => new Date(b.last?.created_at || b.created_at) - new Date(a.last?.created_at || a.created_at));
+}
+function unread(c) {
+  return c.lastCustomerAt && (!state.seen[c.wa_id] || new Date(c.lastCustomerAt) > new Date(state.seen[c.wa_id]));
+}
+function hasLead(c) {
+  const l = c.lead;
+  return !!l && !!(l.name || l.email || l.offer || l.business_name || l.website_goal || l.budget);
+}
+
+async function loadOverview() {
+  state.data = await api("overview");
+  $("#updated").textContent = "Updated " + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const need = contacts().filter((c) => c.handoff && !c.isOwner).length;
+  $("#need-count").textContent = need;
+  $("#need-count").classList.toggle("hidden", !need);
+}
+async function loadMessages() {
+  if (!state.open) return;
+  const id = state.open;
+  const msgs = await api("messages?wa_id=" + encodeURIComponent(id));
+  if (state.open !== id) return;
+  state.messages = msgs;
+  markSeen(id);
+}
+function markSeen(id) {
+  state.seen[id] = new Date().toISOString();
+  store.set("crm_seen", state.seen);
+}
+
+// ---------- rendering ----------
+function render() {
+  document.querySelectorAll("nav.tabs button").forEach((b) => b.classList.toggle("on", b.dataset.view === state.view));
+  if (state.view === "leads") return renderLeads();
+  if (state.view === "stats") return renderStats();
+  return renderInbox();
+}
+
+function renderInbox() {
+  const main = $("#main");
+  let inbox = main.querySelector(".inbox");
+  if (!inbox) {
+    main.innerHTML = `
+      <div class="inbox">
+        <div class="list-pane">
+          <div class="list-tools">
+            <input class="field" id="search" placeholder="Search name, number or message">
+            <div class="chips" id="chips"></div>
+          </div>
+          <div class="chat-list" id="chat-list"></div>
+        </div>
+        <div class="chat-pane" id="chat-pane"></div>
+      </div>`;
+    inbox = main.querySelector(".inbox");
+    $("#search").value = state.q;
+    $("#search").addEventListener("input", (e) => { state.q = e.target.value; renderList(); });
+  }
+  inbox.classList.toggle("chat-open", !!state.open);
+  renderList();
+  renderChat();
+}
+
+function filtered() {
+  const q = state.q.trim().toLowerCase();
+  return contacts().filter((c) => {
+    if (state.filter === "need" && !c.handoff) return false;
+    if (state.filter === "leads" && !hasLead(c)) return false;
+    if (state.filter === "ads" && source(c.lead) !== "Ad") return false;
+    if (state.filter === "unread" && !unread(c)) return false;
+    if (!q) return true;
+    return [c.name, c.wa_id, c.last?.body, c.lead?.name, c.lead?.business_name].some((v) => String(v || "").toLowerCase().includes(q));
+  });
+}
+
+function renderList() {
+  const all = contacts();
+  const counts = {
+    all: all.length,
+    unread: all.filter(unread).length,
+    need: all.filter((c) => c.handoff).length,
+    leads: all.filter(hasLead).length,
+    ads: all.filter((c) => source(c.lead) === "Ad").length,
+  };
+  const labels = { all: "All", unread: "Unread", need: "Needs you", leads: "Leads", ads: "From ads" };
+  $("#chips").innerHTML = Object.keys(labels).map((k) =>
+    `<button class="chip ${state.filter === k ? "on" : ""}" data-filter="${k}">${labels[k]} ${counts[k]}</button>`).join("");
+
+  const rows = filtered();
+  $("#chat-list").innerHTML = rows.length ? rows.map((c) => {
+    const who = c.last?.sender === "ai" ? "Bot: " : c.last?.sender === "human" ? "You: " : "";
+    const tags = [
+      c.isOwner ? `<span class="tag you">You</span>` : "",
+      c.handoff ? `<span class="tag need">Needs you</span>` : "",
+      source(c.lead) === "Ad" ? `<span class="tag ad">Ad</span>` : "",
+      c.lead?.offer ? `<span class="tag lead">${esc(c.lead.offer)}</span>` : "",
+    ].join("");
+    return `<div class="row ${state.open === c.wa_id ? "on" : ""}" data-open="${esc(c.wa_id)}">
+      <div class="avatar">${esc(initials(c.lead?.name || c.name, c.wa_id))}</div>
+      <div class="row-main">
+        <div class="row-name">${esc(c.lead?.name || c.name || fmtPhone(c.wa_id))}</div>
+        <div class="row-last">${tags}${esc(who + (c.last?.body || ""))}</div>
+      </div>
+      <div class="row-side"><span>${esc(when(c.last?.created_at || c.created_at))}</span>${unread(c) && state.open !== c.wa_id ? `<span class="dot"></span>` : ""}</div>
+    </div>`;
+  }).join("") : `<div class="empty">${all.length ? "No chats match." : "No chats yet. They'll appear here as soon as someone messages your WhatsApp number."}</div>`;
+}
+
+function renderChat() {
+  const pane = $("#chat-pane");
+  const c = contacts().find((x) => x.wa_id === state.open);
+  if (!c) {
+    pane.innerHTML = `<div class="pick">Pick a chat on the left to read it and reply.</div>`;
+    return;
+  }
+  const l = c.lead || {};
+  const windowOpen = c.lastCustomerAt && Date.now() - new Date(c.lastCustomerAt) < 24 * 3600e3;
+  // Keep what's on screen (scroll, open lead card, unsaved notes) when re-rendering the same chat.
+  const same = pane.dataset.for === c.wa_id;
+  const prevScroll = same ? pane.querySelector(".messages") : null;
+  const atBottom = !prevScroll || prevScroll.scrollHeight - prevScroll.scrollTop - prevScroll.clientHeight < 60;
+  const focused = same ? document.activeElement?.id : null;
+  const draft = state.draft[c.wa_id] ?? "";
+  const leadOpen = same && (pane.querySelector("details")?.open ?? false);
+  const notesDraft = same ? pane.querySelector("#lead-notes")?.value : undefined;
+  pane.dataset.for = c.wa_id;
+
+  pane.innerHTML = `
+    <div class="chat-head">
+      <button class="back" id="back" aria-label="Back">&larr;</button>
+      <div>
+        <div class="chat-title">${esc(l.name || c.name || fmtPhone(c.wa_id))}</div>
+        <div class="chat-sub">${esc(fmtPhone(c.wa_id))}${c.name && l.name && c.name !== l.name ? " · WhatsApp name: " + esc(c.name) : ""} · <a href="https://wa.me/${esc(c.wa_id)}" target="_blank" rel="noopener">open in WhatsApp</a></div>
+      </div>
+      <div class="mode">
+        ${c.handoff
+          ? `<span class="mode-label human">You're handling this chat</span><button class="btn small primary" data-handoff="0">Hand back to bot</button>`
+          : `<span class="mode-label bot">Bot is replying</span><button class="btn small" data-handoff="1">Take over</button>`}
+      </div>
+    </div>
+    ${c.handoff && c.handoff_reason ? `<div class="lead-card"><span class="tag need">Why</span> ${esc(c.handoff_reason)}</div>` : ""}
+    <details class="lead-card" ${leadOpen ? "open" : ""}>
+      <summary>Lead details <span class="status ${esc(l.status || "new")}">${esc(STATUS[l.status] || "New")}</span> <span class="chat-sub">· ${esc(source(c.lead))}</span></summary>
+      <div class="lead-grid">
+        ${LEAD_FIELDS.filter(([k]) => l[k]).map(([k, label]) => `<div><span>${label}</span>${esc(k === "ref" ? source(l) : l[k])}</div>`).join("") || `<div class="chat-sub">The bot hasn't saved any details yet.</div>`}
+      </div>
+      <div class="lead-edit">
+        <textarea class="field" id="lead-notes" placeholder="Notes">${esc(notesDraft ?? l.notes ?? "")}</textarea>
+        <div class="lead-actions">
+          <select class="field" id="lead-status" style="width:auto">
+            ${Object.entries(STATUS).map(([k, v]) => `<option value="${k}" ${(l.status || "new") === k ? "selected" : ""}>${v}</option>`).join("")}
+          </select>
+          <button class="btn small primary" id="lead-save">Save</button>
+          <span class="chat-sub" id="lead-msg"></span>
+        </div>
+      </div>
+    </details>
+    <div class="messages" id="messages">${messagesHtml()}</div>
+    <div class="composer">
+      ${windowOpen ? "" : `<div class="notice">It's been over 24 hours since this customer last wrote, so WhatsApp won't deliver a normal message until they message again.</div>`}
+      ${!c.handoff && windowOpen ? `<div class="chat-sub">Sending a message pauses the bot in this chat until you hand it back.</div>` : ""}
+      <div class="composer-row">
+        <textarea class="field" id="reply" rows="1" placeholder="${windowOpen ? "Type a reply…" : "Waiting for the customer to message again"}" ${windowOpen ? "" : "disabled"}>${esc(draft)}</textarea>
+        <button class="btn primary" id="send" ${windowOpen ? "" : "disabled"}>Send</button>
+      </div>
+      <div class="error" id="send-error" style="margin:0"></div>
+    </div>`;
+
+  const box = pane.querySelector(".messages");
+  if (atBottom) box.scrollTop = box.scrollHeight;
+  else if (prevScroll) box.scrollTop = prevScroll.scrollTop;
+  const reply = $("#reply");
+  autosize(reply);
+  if (focused === "reply") { reply.focus(); reply.setSelectionRange(reply.value.length, reply.value.length); }
+  reply.addEventListener("input", () => { state.draft[c.wa_id] = reply.value; autosize(reply); });
+  reply.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey && !matchMedia("(max-width: 820px)").matches) { e.preventDefault(); send(); }
+  });
+}
+
+function messagesHtml() {
+  let lastDay = "";
+  return state.messages.map((m) => {
+    const day = new Date(m.created_at).toDateString();
+    const sep = day !== lastDay ? `<div class="day">${esc(dayLabel(m.created_at))}</div>` : "";
+    lastDay = day;
+    const who = { customer: "", ai: "Bot", human: "You", system: "Auto" }[m.sender] ?? "";
+    return `${sep}<div class="msg ${esc(m.sender)}">${esc(m.body || "[" + (m.msg_type || "message") + "]")}<div class="msg-meta">${who ? esc(who) + " · " : ""}${new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div></div>`;
+  }).join("") || `<div class="pick">Loading…</div>`;
+}
+
+/** Refreshes only the message bubbles, so typing in the reply box isn't interrupted. */
+function refreshMessages() {
+  const box = $("#messages");
+  if (!box) return;
+  const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
+  box.innerHTML = messagesHtml();
+  if (atBottom) box.scrollTop = box.scrollHeight;
+}
+
+function autosize(t) { t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 160) + "px"; }
+
+function renderLeads() {
+  const q = state.leadQ.trim().toLowerCase();
+  const rows = contacts().filter((c) => hasLead(c) && !c.isOwner)
+    .filter((c) => state.leadStatus === "all" || (c.lead.status || "new") === state.leadStatus)
+    .filter((c) => !q || [c.lead.name, c.name, c.wa_id, c.lead.email, c.lead.business_name, c.lead.offer, c.lead.website_goal]
+      .some((v) => String(v || "").toLowerCase().includes(q)))
+    .sort((a, b) => new Date(b.lead.updated_at) - new Date(a.lead.updated_at));
+
+  $("#main").innerHTML = `
+    <div class="page"><div class="page-inner">
+      <div class="page-tools">
+        <input class="field" id="lead-search" placeholder="Search leads" value="${esc(state.leadQ)}">
+        <div class="chips">
+          ${[["all", "All"], ...Object.entries(STATUS)].map(([k, v]) => `<button class="chip ${state.leadStatus === k ? "on" : ""}" data-lstatus="${k}">${v}</button>`).join("")}
+        </div>
+        <button class="btn small" id="export" style="margin-left:auto">Download Excel (CSV)</button>
+      </div>
+      ${rows.length ? `<table>
+        <thead><tr><th>Name</th><th>Offer</th><th class="hide-sm">Needs / budget</th><th class="hide-sm">From</th><th>Status</th><th class="hide-sm">Updated</th></tr></thead>
+        <tbody>${rows.map((c) => `
+          <tr class="clickable" data-open-lead="${esc(c.wa_id)}">
+            <td><strong>${esc(c.lead.name || c.name || "")}</strong><div class="chat-sub">${esc(fmtPhone(c.wa_id))}${c.lead.business_name ? " · " + esc(c.lead.business_name) : ""}</div></td>
+            <td>${esc(c.lead.offer || "")}</td>
+            <td class="hide-sm">${esc(c.lead.website_goal || "")}${c.lead.budget ? `<div class="chat-sub">Budget: ${esc(c.lead.budget)}</div>` : ""}</td>
+            <td class="hide-sm">${esc(source(c.lead))}</td>
+            <td><span class="status ${esc(c.lead.status || "new")}">${esc(STATUS[c.lead.status] || "New")}</span></td>
+            <td class="hide-sm">${esc(when(c.lead.updated_at))}</td>
+          </tr>`).join("")}</tbody></table>`
+      : `<div class="empty">No leads yet. When the bot learns a customer's name, offer or budget, they show up here.</div>`}
+    </div></div>`;
+  $("#lead-search").addEventListener("input", (e) => {
+    state.leadQ = e.target.value;
+    const pos = e.target.selectionStart;
+    renderLeads();
+    const s = $("#lead-search"); s.focus(); s.setSelectionRange(pos, pos);
+  });
+}
+
+function renderStats() {
+  const all = contacts().filter((c) => !c.isOwner);
+  const leads = all.filter(hasLead);
+  const dayMs = 864e5, today0 = new Date(new Date().toDateString()).getTime();
+  const newToday = all.filter((c) => new Date(c.created_at).getTime() >= today0).length;
+  const new7 = all.filter((c) => new Date(c.created_at).getTime() >= today0 - 6 * dayMs).length;
+  const paid = leads.filter((c) => c.lead.status === "won").length;
+
+  const days = [...Array(14)].map((_, i) => {
+    const start = today0 - (13 - i) * dayMs;
+    return { start, n: all.filter((c) => { const t = new Date(c.created_at).getTime(); return t >= start && t < start + dayMs; }).length };
+  });
+  const max = Math.max(1, ...days.map((d) => d.n));
+
+  const tally = (arr, fn) => Object.entries(arr.reduce((m, x) => { const k = fn(x); m[k] = (m[k] || 0) + 1; return m; }, {})).sort((a, b) => b[1] - a[1]);
+  const hlist = (pairs) => {
+    if (!pairs.length) return `<div class="chat-sub">Nothing yet.</div>`;
+    const top = Math.max(...pairs.map((p) => p[1]));
+    return pairs.map(([k, n]) => `<div class="hrow"><span>${esc(k)}</span><strong>${n}</strong><div class="hbar"><i style="width:${(n / top) * 100}%"></i></div></div>`).join("");
+  };
+
+  $("#main").innerHTML = `
+    <div class="page"><div class="page-inner">
+      <div class="cards">
+        <div class="card"><div class="num">${all.length}</div><div class="lbl">People who messaged</div></div>
+        <div class="card"><div class="num">${newToday}</div><div class="lbl">New today</div></div>
+        <div class="card"><div class="num">${new7}</div><div class="lbl">New in last 7 days</div></div>
+        <div class="card"><div class="num">${leads.length}</div><div class="lbl">Leads with details</div></div>
+        <div class="card"><div class="num">${all.filter((c) => c.handoff).length}</div><div class="lbl">Waiting for you</div></div>
+        <div class="card"><div class="num">${paid}</div><div class="lbl">Paid${all.length ? ` · ${Math.round((paid / all.length) * 100)}% of chats` : ""}</div></div>
+      </div>
+      <div class="panels">
+        <div class="panel"><h3>New chats per day (last 14 days)</h3>
+          <div class="bars">${days.map((d) => `<div class="bar" title="${d.n}"><span>${d.n || ""}</span><i style="height:${(d.n / max) * 100}%"></i><span>${new Date(d.start).getDate()}</span></div>`).join("")}</div>
+        </div>
+        <div class="panel"><h3>Leads by offer</h3>${hlist(tally(leads.filter((c) => c.lead.offer), (c) => c.lead.offer))}</div>
+        <div class="panel"><h3>Where chats come from</h3>${hlist(tally(all, (c) => source(c.lead)))}</div>
+      </div>
+      <p class="chat-sub" style="margin-top:14px">Your own number isn't counted. "Ad" means they tapped a WhatsApp ad; "Link" means one of your offer links or QR codes.</p>
+    </div></div>`;
+}
+
+// ---------- actions ----------
+async function openChat(id) {
+  state.open = id;
+  state.messages = [];
+  if (state.view !== "inbox") { state.view = "inbox"; store.set("crm_view", "inbox"); $("#main").innerHTML = ""; }
+  render();
+  try { await loadMessages(); } catch (e) { console.error(e); }
+  render();
+}
+
+async function send() {
+  const id = state.open, t = $("#reply"), btn = $("#send");
+  const text = t.value.trim();
+  if (!text) return;
+  btn.disabled = true; $("#send-error").textContent = "";
+  try {
+    await api("reply", { method: "POST", body: JSON.stringify({ wa_id: id, text }) });
+    state.draft[id] = "";
+    await Promise.all([loadOverview(), loadMessages()]);
+    render();
+  } catch (e) {
+    if (e.message !== "unauthorized") { $("#send-error").textContent = e.message; btn.disabled = false; }
+  }
+}
+
+async function setHandoff(on) {
+  try {
+    await api("handoff", { method: "POST", body: JSON.stringify({ wa_id: state.open, handoff: on }) });
+    await loadOverview();
+    render();
+  } catch (e) { if (e.message !== "unauthorized") alert(e.message); }
+}
+
+async function saveLead() {
+  const msg = $("#lead-msg");
+  msg.textContent = "Saving…";
+  try {
+    await api("lead", { method: "POST", body: JSON.stringify({ wa_id: state.open, status: $("#lead-status").value, notes: $("#lead-notes").value }) });
+    await loadOverview();
+    render();
+    $("#lead-msg").textContent = "Saved";
+  } catch (e) { if (e.message !== "unauthorized") msg.textContent = e.message; }
+}
+
+function exportCsv() {
+  const cols = ["name", "wa_id", "email", "business_name", "offer", "website_goal", "budget", "timeline", "status", "source", "notes", "created_at"];
+  const rows = contacts().filter((c) => hasLead(c) && !c.isOwner).map((c) => ({
+    ...c.lead, name: c.lead.name || c.name || "", wa_id: "+" + c.wa_id, status: STATUS[c.lead.status] || "New", source: source(c.lead),
+  }));
+  const cell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const csv = "﻿" + [cols.join(","), ...rows.map((r) => cols.map((k) => cell(r[k])).join(","))].join("\r\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  a.download = `davdags-leads-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("[data-view],[data-filter],[data-open],[data-open-lead],[data-handoff],[data-lstatus],#back,#send,#lead-save,#export,#logout");
+  if (!t) return;
+  if (t.dataset.view) { state.view = t.dataset.view; store.set("crm_view", state.view); $("#main").innerHTML = ""; render(); }
+  else if (t.dataset.filter) { state.filter = t.dataset.filter; renderList(); }
+  else if (t.dataset.open) openChat(t.dataset.open);
+  else if (t.dataset.openLead) openChat(t.dataset.openLead);
+  else if (t.dataset.handoff) setHandoff(t.dataset.handoff === "1");
+  else if (t.dataset.lstatus) { state.leadStatus = t.dataset.lstatus; renderLeads(); }
+  else if (t.id === "back") { state.open = null; render(); }
+  else if (t.id === "send") send();
+  else if (t.id === "lead-save") saveLead();
+  else if (t.id === "export") exportCsv();
+  else if (t.id === "logout") logout();
+});
+
+// ---------- login & refresh ----------
+function logout(message) {
+  state.key = ""; state.data = null; state.open = null;
+  store.del("crm_key");
+  $("#app").classList.add("hidden");
+  $("#login").classList.remove("hidden");
+  $("#login-error").textContent = message || "";
+}
+
+$("#login-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  state.key = $("#password").value;
+  $("#login-error").textContent = "Checking…";
+  try {
+    await loadOverview();
+    store.set("crm_key", state.key);
+    start();
+  } catch (err) {
+    if (err.message !== "unauthorized") $("#login-error").textContent = err.message;
+  }
+});
+
+let timer = null, tick = 0;
+function start() {
+  $("#login").classList.add("hidden");
+  $("#app").classList.remove("hidden");
+  $("#password").value = "";
+  render();
+  clearInterval(timer);
+  timer = setInterval(async () => {
+    if (document.hidden || !state.key) return;
+    tick++;
+    try {
+      // Open chat refreshes every 8s; the inbox list every 24s.
+      if (state.open && state.view === "inbox") await loadMessages();
+      if (tick % 3 === 0 || !state.open) await loadOverview();
+      const typing = ["reply", "lead-notes", "lead-status", "lead-search", "search"].includes(document.activeElement?.id);
+      if (state.view === "inbox") { renderList(); if (typing) refreshMessages(); else renderChat(); }
+      else if (!typing) render();
+    } catch (e) { console.warn(e); }
+  }, 8000);
+}
+
+(async () => {
+  if (!state.key) return logout();
+  try { await loadOverview(); start(); } catch (e) { if (e.message !== "unauthorized") logout(e.message); }
+})();
+</script>
+</body>
+</html>

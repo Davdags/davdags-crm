@@ -275,6 +275,7 @@ function contacts() {
 function unread(c) {
   return c.lastCustomerAt && (!state.seen[c.wa_id] || new Date(c.lastCustomerAt) > new Date(state.seen[c.wa_id]));
 }
+function blocked(c) { return c.opted_out && c.handoff_reason === "Blocked"; }
 function hasLead(c) {
   const l = c.lead;
   return !!l && !!(l.name || l.email || l.offer || l.business_name || l.website_goal || l.budget);
@@ -404,9 +405,10 @@ function renderChat() {
         <div class="chat-sub">${esc(fmtPhone(c.wa_id))}${c.name && l.name && c.name !== l.name ? " · WhatsApp name: " + esc(c.name) : ""} · <a href="https://wa.me/${esc(c.wa_id)}" target="_blank" rel="noopener">open in WhatsApp</a></div>
       </div>
       <div class="mode">
-        ${c.handoff
+        ${blocked(c) ? `<span class="mode-label human">Blocked</span><button class="btn small" data-block="0">Unblock</button>` : c.handoff
           ? `<span class="mode-label human">You're handling this chat</span><button class="btn small primary" data-handoff="0">Hand back to bot</button>`
           : `<span class="mode-label bot">Bot is replying</span><button class="btn small" data-handoff="1">Take over</button>`}
+        ${blocked(c) || c.isOwner ? "" : `<button class="btn small" data-block="1" title="Stop this number from messaging you">Block</button>`}
       </div>
     </div>
     ${c.handoff && c.handoff_reason ? `<div class="lead-card"><span class="tag need">Why</span> ${esc(c.handoff_reason)}</div>` : ""}
@@ -584,6 +586,17 @@ async function setHandoff(on) {
   } catch (e) { if (e.message !== "unauthorized") alert(e.message); }
 }
 
+async function setBlocked(block) {
+  const c = contacts().find((x) => x.wa_id === state.open);
+  const who = c?.lead?.name || c?.name || fmtPhone(state.open);
+  if (block && !confirm(`Block ${who}? They won't be able to message your WhatsApp number any more.`)) return;
+  try {
+    await api("block", { method: "POST", body: JSON.stringify({ wa_id: state.open, unblock: !block }) });
+    await loadOverview();
+    render();
+  } catch (e) { if (e.message !== "unauthorized") alert(e.message); }
+}
+
 async function saveLead() {
   const msg = $("#lead-msg");
   msg.textContent = "Saving…";
@@ -610,13 +623,14 @@ function exportCsv() {
 }
 
 document.addEventListener("click", (e) => {
-  const t = e.target.closest("[data-view],[data-filter],[data-open],[data-open-lead],[data-handoff],[data-lstatus],#back,#send,#lead-save,#export,#logout");
+  const t = e.target.closest("[data-view],[data-filter],[data-open],[data-open-lead],[data-handoff],[data-block],[data-lstatus],#back,#send,#lead-save,#export,#logout");
   if (!t) return;
   if (t.dataset.view) { state.view = t.dataset.view; store.set("crm_view", state.view); $("#main").innerHTML = ""; render(); }
   else if (t.dataset.filter) { state.filter = t.dataset.filter; renderList(); }
   else if (t.dataset.open) openChat(t.dataset.open);
   else if (t.dataset.openLead) openChat(t.dataset.openLead);
   else if (t.dataset.handoff) setHandoff(t.dataset.handoff === "1");
+  else if (t.dataset.block) setBlocked(t.dataset.block === "1");
   else if (t.dataset.lstatus) { state.leadStatus = t.dataset.lstatus; renderLeads(); }
   else if (t.id === "back") { state.open = null; render(); }
   else if (t.id === "send") send();

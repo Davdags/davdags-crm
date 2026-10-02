@@ -570,18 +570,24 @@ async function openChat(id) {
   render();
 }
 
+let sending = false;
 async function send() {
   const id = state.open, t = $("#reply"), btn = $("#send");
   const text = t.value.trim();
-  if (!text) return;
-  btn.disabled = true; $("#send-error").textContent = "";
+  if (!text || sending) return; // one tap = one message, even if Send is pressed again while it's going
+  sending = true;
+  btn.disabled = true; btn.textContent = "Sending…"; $("#send-error").textContent = "";
+  try { await sendNow(id, text, btn); } finally { sending = false; }
+}
+
+async function sendNow(id, text, btn) {
   try {
     await api("reply", { method: "POST", body: JSON.stringify({ wa_id: id, text }) });
     state.draft[id] = "";
     await Promise.all([loadOverview(), loadMessages()]);
     render();
   } catch (e) {
-    if (e.message !== "unauthorized") { $("#send-error").textContent = e.message; btn.disabled = false; }
+    if (e.message !== "unauthorized") { $("#send-error").textContent = e.message; btn.disabled = false; btn.textContent = "Send"; }
   }
 }
 

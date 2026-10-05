@@ -483,6 +483,12 @@ function displayText(m) {
   if (x) return x[2] || (x[1] === "image" ? "📷 Photo" : x[1] === "video" ? "🎥 Video" : x[1] === "document" ? "📄 File" : "Sticker");
   x = body.match(/^\[Voice note\] ([\s\S]*)/);
   if (x) return "🎤 " + x[1];
+  x = body.match(/^\[Template: reopen_chat\] (.*)$/);
+  if (x) return `📨 "Still interested?" message: Hi ${x[1]}, thanks for your interest in a website from DavDags. Are you still looking to get one?`;
+  x = body.match(/^\[Re-open message\] ([\s\S]*)$/);
+  if (x) return `📨 "Still interested?" message: ${x[1]}`;
+  x = body.match(/^\[Template: owner_alert\] (.*)$/);
+  if (x) return `🔔 Alert to you: ${x[1]}`;
   x = body.match(/^\[Sent portfolio image: (.*) - (\S+)\]$/);
   if (x) return `${x[1]}\n${x[2]}`;
   if (/^\[(Image|Video|Audio|Document)\]$/.test(body)) return "";

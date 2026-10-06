@@ -164,14 +164,20 @@ function contact(id) {
   const s = stat(id);
   return { ...c, lead: S.leads.get(id) || null, ...s, isOwner: id === S.owner };
 }
-let contactsCache = null;
-function contacts() {
-  if (contactsCache) return contactsCache;
-  contactsCache = [...S.contacts.keys()].map(contact)
+let allCache = null, contactsCache = null;
+// Every chat ever, including ones you deleted (for totals on the Stats page).
+function allContacts() {
+  if (allCache) return allCache;
+  allCache = [...S.contacts.keys()].map(contact)
     .sort((a, b) => new Date(b.last?.created_at || b.created_at) - new Date(a.last?.created_at || a.created_at));
+  return allCache;
+}
+// The chats you work with: deleted ones are hidden everywhere except the Stats totals.
+function contacts() {
+  if (!contactsCache) contactsCache = allContacts().filter((c) => !c.deleted_at);
   return contactsCache;
 }
-const dirty = () => { contactsCache = null; };
+const dirty = () => { allCache = null; contactsCache = null; };
 const blocked = (c) => c.opted_out && c.handoff_reason === "Blocked";
 const unread = (c) => !c.isOwner && c.lastCustomerAt && (!S.seen[c.wa_id] || new Date(c.lastCustomerAt) > new Date(S.seen[c.wa_id]));
 function hasLead(c) {
@@ -786,10 +792,10 @@ async function setBlocked(block) {
 }
 async function deleteChat() {
   const id = S.open, c = contact(id);
-  if (!confirm(`Delete the chat with ${c?.lead?.name || c?.name || fmtPhone(id)}? Messages and lead details are removed from the CRM for good. (It doesn't block them.)`)) return;
+  if (!confirm(`Delete the chat with ${c?.lead?.name || c?.name || fmtPhone(id)}? It disappears from your lists but still counts in your Stats totals. If they message again it comes back. (It doesn't block them.)`)) return;
   try {
     await post("delete", { wa_id: id });
-    S.contacts.delete(id); S.leads.delete(id); S.stats.delete(id); dirty();
+    S.contacts.set(id, { ...S.contacts.get(id), deleted_at: new Date().toISOString(), handoff: false }); dirty();
     closeChat();
     toast("Chat deleted");
   } catch (e) { if (e.message !== "unauthorized") toast(e.message); }
@@ -1171,7 +1177,8 @@ function exportLeads() {
 
 // ---------- stats ----------
 function renderStats() {
-  const all = contacts().filter((c) => !c.isOwner);
+  const all = allContacts().filter((c) => !c.isOwner); // includes deleted chats
+  const deleted = all.filter((c) => c.deleted_at).length;
   const leads = all.filter(hasLead);
   const dayMs = 864e5, today0 = new Date(new Date().toDateString()).getTime();
   const newToday = all.filter((c) => new Date(c.created_at).getTime() >= today0).length;
@@ -1203,7 +1210,8 @@ function renderStats() {
         <div class="card"><div class="num">${newToday}</div><div class="lbl">New today</div></div>
         <div class="card"><div class="num">${new7}</div><div class="lbl">New in last 7 days</div></div>
         <div class="card"><div class="num">${all.filter((c) => quality(c).is).length}</div><div class="lbl">⭐ Quality leads</div></div>
-        <div class="card"><div class="num">${all.filter((c) => c.handoff && !blocked(c)).length}</div><div class="lbl">Waiting for you</div></div>
+        <div class="card"><div class="num">${all.filter((c) => c.handoff && !blocked(c) && !c.deleted_at).length}</div><div class="lbl">Waiting for you</div></div>
+        <div class="card"><div class="num">${deleted}</div><div class="lbl">🗑 Deleted chats</div></div>
         <div class="card"><div class="num">${paid}</div><div class="lbl">Paid</div></div>
       </div>
       <div class="panel" style="margin-bottom:12px"><h3>Sales funnel</h3>

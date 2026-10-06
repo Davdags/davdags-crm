@@ -221,6 +221,40 @@ tr.clickable:hover td { background: var(--panel-2); }
 .rem .due { font-size: 12px; font-weight: 700; color: var(--muted); }
 .rem.overdue .due { color: var(--danger); }
 
+/* ---------- calls & team ---------- */
+.page-inner.narrow { max-width: 760px; }
+.tag.cold { background: var(--panel-2); color: var(--faint); border: 1px solid var(--line); }
+.ccard { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 10px; box-shadow: var(--shadow); }
+.ccard.overdue { border-color: var(--danger); }
+.ccard.done { box-shadow: none; opacity: .85; }
+.ccard-top { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.ccard-sum { margin-top: 6px; }
+.ccard-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; align-items: center; }
+.ccard-actions a.btn { text-decoration: none; color: inherit; }
+.ccard-actions a.btn.primary { color: var(--brand-ink); }
+.ccard-actions .assign { width: auto; padding: 5px 8px; font-size: 13px; border-radius: 8px; }
+.outcomes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+.outcomes .btn { padding: 12px 8px; }
+.team-form { display: flex; gap: 8px; flex-wrap: wrap; }
+.team-form .field { flex: 1; min-width: 140px; }
+.row-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+tr.inactive td { opacity: .6; }
+.code-big { font-size: 34px; font-weight: 800; letter-spacing: .08em; text-align: center; padding: 14px; border-radius: 12px; background: var(--brand-soft); font-variant-numeric: tabular-nums; }
+.check { display: flex; gap: 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; }
+.check input { width: 18px; height: 18px; }
+.sheet-msgs { max-height: 58vh; min-height: 200px; background: var(--chat-bg); border-radius: 12px; }
+.hello { margin-bottom: 6px; color: var(--muted); }
+.delta { font-size: 11px; font-weight: 700; margin-left: 4px; }
+.delta.up { color: var(--ok); }
+.delta.down { color: var(--danger); }
+.spend-row { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 12px; align-items: end; }
+.spend-row label { font-size: 13px; color: var(--muted); display: grid; gap: 4px; }
+.num-sm { font-size: 20px; font-weight: 800; }
+@media (max-width: 820px) {
+  .spend-row { grid-template-columns: 1fr 1fr; }
+  .spend-row label { grid-column: 1 / -1; }
+}
+
 /* ---------- phones ---------- */
 @media (max-width: 820px) {
   header.top { padding: 8px 12px; }

@@ -12,7 +12,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/favicon-64.png">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
-<link rel="stylesheet" href="styles.css?v=3">
+<link rel="stylesheet" href="styles.css?v=5">
 </head>
 <body>
 
@@ -20,8 +20,8 @@
   <form class="login-card" id="login-form">
     <img src="icons/icon-192.png" alt="">
     <h1>DavDags CRM</h1>
-    <p>Your WhatsApp chats, leads and clients.</p>
-    <input class="field" id="password" type="password" placeholder="Password" autocomplete="current-password" required>
+    <p>Your WhatsApp chats, leads, calls and clients.</p>
+    <input class="field" id="password" type="password" placeholder="Password or agent code" autocomplete="current-password" required>
     <div style="height:12px"></div>
     <button class="btn primary" style="width:100%" type="submit">Log in</button>
     <div class="error" id="login-error" style="margin-top:10px"></div>
@@ -42,6 +42,7 @@
 </section>
 
 <div id="overlay"></div>
-<script src="app.js?v=4"></script>
+<script src="calls.js?v=5"></script>
+<script src="app.js?v=5"></script>
 </body>
 </html>

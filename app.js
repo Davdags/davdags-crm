@@ -7,6 +7,7 @@ const VAPID_PUBLIC_KEY = "BCtPdOq8THqzILdS4TS8J5TkRLKXL52p9ByMlsflTjBV7bjJrgRWYc
 const POLL_VISIBLE_MS = 3000;
 const POLL_HIDDEN_MS = 20000;
 const FULL_REFRESH_MS = 5 * 60 * 1000;
+const AGENT_POLL_MS = 15000;
 
 const STATUS = { new: "New", qualified: "Quoted", deposit: "Deposit pending", won: "Paid", lost: "Lost" };
 const PROJECT_STATUSES = ["Deposit pending", "Deposit paid", "In progress", "Preview sent", "Delivered", "Fully paid", "Cancelled"];
@@ -39,12 +40,16 @@ const QUICK_REPLIES = [
 
 const VIEWS = [
   { key: "inbox", label: "Inbox", icon: "💬" },
+  { key: "calls", label: "Calls", icon: "📞" },
   { key: "quality", label: "Quality", icon: "⭐" },
-  { key: "pipeline", label: "Pipeline", icon: "📋" },
   { key: "clients", label: "Clients", icon: "💼" },
+  { key: "pipeline", label: "Pipeline", icon: "📋" },
   { key: "leads", label: "Leads", icon: "👥" },
+  { key: "team", label: "Team", icon: "🧑‍💼" },
   { key: "stats", label: "Stats", icon: "📈" },
 ];
+// Call agents see a cut-down app (calls.js).
+const views = () => (S.role === "agent" ? AGENT_VIEWS : VIEWS);
 
 // ---------- storage (best effort: private windows may block it) ----------
 const store = {
@@ -80,6 +85,14 @@ const S = {
   draft: {},
   sound: store.get("crm_sound", true),
   menuOpen: false,
+  role: "", // "owner" or "agent", from the overview
+  agents: [],
+  calls: new Map(),
+  lostReasons: [],
+  me: null, // the logged-in call agent
+  closed: [],
+  earned: 0,
+  owed: 0,
 };
 
 // ---------- helpers ----------
@@ -194,10 +207,12 @@ function quality(c) {
     ["Budget is ₦300,000 or more (if they gave one)", budget === null || budget >= MIN_PRICE],
     ["Didn't say the price is too much", !c.priceObjection],
   ];
-  const auto = !c.isOwner && l.status !== "lost" && checks.every(([, ok]) => ok);
+  const auto = !c.isOwner && l.status !== "lost" && l.tier !== "cold" && checks.every(([, ok]) => ok);
   const override = l.quality || null; // "yes" / "no" set by you wins over the rules
   const is = override ? override === "yes" : auto;
   const hotWhy = [
+    l.tier === "hot" && "bot marked hot",
+    openCallFor(c.wa_id) && "call booked",
     budget !== null && budget >= MIN_PRICE && "gave a budget",
     l.timeline && "gave a timeline",
     l.email && "gave an email",
@@ -229,6 +244,11 @@ function countMessage(m) {
 
 // ---------- loading & live sync ----------
 function hydrate(d) {
+  if (d.role === "agent") return hydrateAgent(d);
+  S.role = "owner";
+  S.agents = d.agents || [];
+  S.calls = new Map((d.calls || []).map((c) => [c.id, c]));
+  S.lostReasons = d.lostReasons || [];
   S.owner = d.owner;
   S.contacts = new Map((d.contacts || []).map((c) => [c.wa_id, c]));
   S.leads = new Map((d.leads || []).map((l) => [l.wa_id, l]));
@@ -260,6 +280,7 @@ async function poll() {
   let changed = false;
   for (const c of d.contacts || []) { S.contacts.set(c.wa_id, c); changed = true; }
   for (const l of d.leads || []) { S.leads.set(l.wa_id, l); changed = true; }
+  for (const call of d.calls || []) { S.calls.set(call.id, call); changed = true; }
   const incoming = [];
   let needOverview = false;
   for (const m of d.messages || []) {
@@ -296,7 +317,8 @@ async function loop() {
   if (!S.key || polling) return;
   polling = true;
   try {
-    if (Date.now() - lastFull > FULL_REFRESH_MS) { await loadOverview(); lastFull = Date.now(); dirty(); refreshAfterChange(); }
+    // Agents have only a handful of calls, so they simply reload them.
+    if (S.role === "agent" || Date.now() - lastFull > FULL_REFRESH_MS) { await loadOverview(); lastFull = Date.now(); dirty(); refreshAfterChange(); }
     else await poll();
     setOnline(true);
   } catch (e) {
@@ -304,7 +326,7 @@ async function loop() {
     setOnline(false);
   }
   polling = false;
-  pollTimer = setTimeout(loop, document.hidden ? POLL_HIDDEN_MS : POLL_VISIBLE_MS);
+  pollTimer = setTimeout(loop, document.hidden ? POLL_HIDDEN_MS : S.role === "agent" ? AGENT_POLL_MS : POLL_VISIBLE_MS);
 }
 document.addEventListener("visibilitychange", () => { if (!document.hidden && S.key) loop(); });
 window.addEventListener("online", () => S.key && loop());
@@ -347,10 +369,12 @@ function updateBadges() {
   const need = all.filter((c) => c.handoff && !c.isOwner && !blocked(c)).length;
   const qual = all.filter((c) => quality(c).is && replyWindow(c).open).length;
   const due = S.reminders.filter((r) => !r.done && new Date(r.due_at) <= new Date()).length;
-  document.title = unreadN ? `(${unreadN}) DavDags CRM` : "DavDags CRM";
-  try { unreadN ? navigator.setAppBadge?.(unreadN) : navigator.clearAppBadge?.(); } catch {}
-  const counts = { inbox: need, quality: qual, pipeline: due };
-  for (const v of VIEWS) {
+  const callsDue = callsList().filter((c) => c.status === "booked" && callIsDue(c)).length;
+  const badge = S.role === "agent" ? callsDue : unreadN;
+  document.title = badge ? `(${badge}) DavDags CRM` : "DavDags CRM";
+  try { badge ? navigator.setAppBadge?.(badge) : navigator.clearAppBadge?.(); } catch {}
+  const counts = { inbox: need, quality: qual, pipeline: due, calls: callsDue, mycalls: callsDue };
+  for (const v of views()) {
     for (const el of $$(`[data-count="${v.key}"]`)) {
       const n = counts[v.key] || 0;
       el.textContent = n;
@@ -361,16 +385,22 @@ function updateBadges() {
 
 // ---------- shell ----------
 function renderNav() {
-  $("#tabs").innerHTML = VIEWS.map((v) =>
+  const agent = S.role === "agent";
+  $(".brand").lastChild.textContent = agent ? ` DavDags Calls · ${firstWord(S.me?.name)}` : " DavDags CRM";
+  $("#tabs").innerHTML = views().map((v) =>
     `<button data-view="${v.key}" class="${S.view === v.key ? "on" : ""}">${v.label}<span class="count ${v.key === "quality" ? "good" : ""} hidden" data-count="${v.key}"></span></button>`).join("");
-  const bottom = [...VIEWS.slice(0, 4), { key: "more", label: "More", icon: "☰" }];
+  const main = agent ? views() : VIEWS.slice(0, 4);
+  const bottom = [...main, { key: "more", label: agent ? "Settings" : "More", icon: agent ? "⚙️" : "☰" }];
+  const inMore = !agent && !main.some((v) => v.key === S.view);
+  $("#bottom-nav").style.gridTemplateColumns = `repeat(${bottom.length}, 1fr)`;
   $("#bottom-nav").innerHTML = bottom.map((v) =>
-    `<button data-view="${v.key}" class="${S.view === v.key || (v.key === "more" && ["leads", "stats"].includes(S.view)) ? "on" : ""}"><b>${v.icon}</b>${v.label}<span class="count ${v.key === "quality" ? "good" : ""} hidden" data-count="${v.key}"></span></button>`).join("");
+    `<button data-view="${v.key}" class="${S.view === v.key || (v.key === "more" && inMore) ? "on" : ""}"><b>${v.icon}</b>${v.label}<span class="count ${v.key === "quality" ? "good" : ""} hidden" data-count="${v.key}"></span></button>`).join("");
   updateBadges();
 }
 
 function setView(view) {
-  if (view === "more") return openMore();
+  if (view === "more") return S.role === "agent" ? openSettings() : openMore();
+  if (!views().some((v) => v.key === view)) view = views()[0].key;
   S.view = view;
   store.set("crm_view", view);
   if (view !== "inbox") { S.open = null; document.body.classList.remove("in-chat"); }
@@ -381,7 +411,12 @@ function setView(view) {
 
 function render() {
   if (!S.loaded) { $("#main").innerHTML = skeleton(); return; }
-  ({ inbox: renderInbox, quality: renderQuality, pipeline: renderPipeline, clients: renderClients, leads: renderLeads, stats: renderStats }[S.view] || renderInbox)();
+  const pages = {
+    inbox: renderInbox, calls: renderCalls, quality: renderQuality, pipeline: renderPipeline, clients: renderClients,
+    leads: renderLeads, team: renderTeam, stats: renderStats, mycalls: renderMyCalls, mydone: renderMyDone, earnings: renderEarnings,
+  };
+  const ok = views().some((v) => v.key === S.view);
+  (ok && pages[S.view] || pages[views()[0].key])();
   updateBadges();
 }
 
@@ -459,6 +494,8 @@ function renderList() {
     const tags = [
       c.isOwner ? `<span class="tag you">You</span>` : "",
       q.hot ? `<span class="tag hot">🔥 Hot</span>` : q.is ? `<span class="tag star">⭐</span>` : "",
+      openCallFor(c.wa_id) ? `<span class="tag hot">📞</span>` : "",
+      c.lead?.tier === "cold" ? `<span class="tag cold">Cold</span>` : "",
       c.lead?.status === "deposit" ? `<span class="tag pay">💰 Pay</span>` : "",
       c.handoff && !blocked(c) ? `<span class="tag need">Needs you</span>` : "",
       c.flagged ? `<span class="tag need">⚠</span>` : "",
@@ -503,6 +540,7 @@ function displayText(m) {
 
 // ---------- chat ----------
 async function openChat(id) {
+  if (S.role === "agent") return openChatSheet(id);
   if (S.view !== "inbox") { S.view = "inbox"; store.set("crm_view", "inbox"); $("#main").innerHTML = ""; renderNav(); }
   S.open = id;
   S.messages = [];
@@ -569,6 +607,7 @@ function renderChatParts({ keepComposer }) {
     <div class="menu">
       <button class="icon-btn" data-action="menu" aria-label="More">⋯</button>
       ${S.menuOpen ? `<div class="menu-list">
+        ${c.isOwner ? "" : `<button data-action="book-call">📞 ${openCallFor(c.wa_id) ? "Move the call" : "Book a call"}</button>`}
         <button data-action="remind">⏰ Set a reminder</button>
         ${l.project_status ? "" : `<button data-action="make-client">💼 Make client</button>`}
         <button data-action="portfolio">🖼 Send portfolio example</button>
@@ -585,6 +624,7 @@ function renderChatParts({ keepComposer }) {
     const due = S.reminders.filter((r) => r.wa_id === c.wa_id && !r.done);
     banners.innerHTML = `
       ${c.isOwner ? "" : qualityLine(c)}
+      ${callBanner(c.wa_id)}
       ${c.flagged ? `<div class="banner danger"><span class="tag need">⚠ Flagged</span> Sent what looks like a bank account or phone number: “${esc(c.flagged)}”. Often someone expecting money.</div>` : ""}
       ${c.handoff && c.handoff_reason && !OWNER_HANDOFFS.includes(c.handoff_reason) ? `<div class="banner"><span class="tag need">Why</span> ${esc(c.handoff_reason)}</div>` : ""}
       ${due.map((r) => `<div class="banner"><span class="tag you">⏰ ${esc(endsLabel(new Date(r.due_at)))}</span> ${esc(r.note || "Follow up")} <button class="btn small" style="margin-left:auto" data-reminder-done="${r.id}">Done</button></div>`).join("")}
@@ -875,8 +915,10 @@ async function reminderDone(id) {
 function openMore() {
   sheet(`<h3>More</h3>
     <div style="display:grid;gap:8px">
+      <button class="btn" data-view="pipeline">📋 Pipeline</button>
       <button class="btn" data-view="leads">👥 Leads</button>
-      <button class="btn" data-view="stats">📈 Stats</button>
+      <button class="btn" data-view="team">🧑‍💼 Team (call agents)</button>
+      <button class="btn" data-view="stats">📈 Stats & weekly score</button>
       <button class="btn" data-action="settings">⚙️ Notifications & settings</button>
     </div>`);
 }
@@ -889,7 +931,7 @@ async function openSettings() {
     <div style="display:grid;gap:12px">
       <div class="card" style="box-shadow:none">
         <strong>🔔 Phone notifications</strong>
-        <div class="chat-sub" style="margin:4px 0 10px">Alerts for new leads, people who need you, payments and reminders, even when the CRM is closed.</div>
+        <div class="chat-sub" style="margin:4px 0 10px">${S.role === "agent" ? "An alert the moment a customer is ready for your call, even when this app is closed. Turn this on so you never miss a call." : "Alerts for new leads, people who need you, payments and reminders, even when the CRM is closed."}</div>
         ${ios && !standalone ? `<div class="notice">On iPhone: tap Share → <b>Add to Home Screen</b>, open the CRM from the new icon, then come back here.</div>` : ""}
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn primary" data-action="enable-push">${pushOn ? "✓ On (turn on again)" : "Turn on notifications"}</button>
@@ -1075,21 +1117,22 @@ function renderClients() {
         <div class="card"><div class="num">${naira(Math.max(0, agreed - received))}</div><div class="lbl">Still to collect</div></div>
       </div>
       <div class="page-tools">
-        <span class="chat-sub">Clients appear when the bot books them, when you tap 💼 Make client, or when you move them on the Pipeline. Changes also update your Google Sheet.</span>
+        <span class="chat-sub">Clients appear when an agent logs ✅ Agreed, when the bot books them, when you tap 💼 Make client, or when you move them on the Pipeline. Changes also update your Google Sheet. When you enter their first payment, they automatically get a "send us your content" message; at "Fully paid" they get a thank-you asking for a review and referrals.</span>
         <button class="btn small" data-action="export-clients" style="margin-left:auto">Download Excel (CSV)</button>
       </div>
       ${list.length ? `<table>
-        <thead><tr><th>Client</th><th>Agreed price</th><th>Paid so far</th><th>Balance</th><th>Status</th><th class="hide-sm">Delivery date</th><th></th></tr></thead>
+        <thead><tr><th>Client</th><th>Agreed price</th><th>Paid so far</th><th>Balance</th><th>Status</th><th>Content</th><th class="hide-sm">Delivery date</th><th></th></tr></thead>
         <tbody>${list.map((c) => {
           const l = c.lead;
           const bal = l.agreed_price ? Math.max(0, l.agreed_price - (l.amount_paid || 0)) : null;
           return `<tr data-client="${esc(c.wa_id)}">
             <td><strong class="clickable" data-open="${esc(c.wa_id)}" style="cursor:pointer">${esc(l.name || c.name || fmtPhone(c.wa_id))}</strong>
-              <div class="chat-sub">${esc(fmtPhone(c.wa_id))}${l.business_name ? " · " + esc(l.business_name) : ""}</div></td>
+              <div class="chat-sub">${esc(fmtPhone(c.wa_id))}${l.business_name ? " · " + esc(l.business_name) : ""}${l.agent_id ? " · 👤 " + esc(agentName(l.agent_id)) : ""}</div></td>
             <td><input class="field" style="width:120px" inputmode="numeric" data-f="agreed_price" value="${esc(l.agreed_price ?? "")}" placeholder="300000"></td>
             <td><input class="field" style="width:120px" inputmode="numeric" data-f="amount_paid" value="${esc(l.amount_paid ?? 0)}"></td>
             <td><strong>${naira(bal)}</strong></td>
             <td><select class="field" data-f="project_status">${PROJECT_STATUSES.map((p) => `<option ${p === l.project_status ? "selected" : ""}>${p}</option>`).join("")}</select></td>
+            <td><button class="btn small ${onboardCount(l) === ONBOARD_ITEMS.length ? "" : "ghost"}" data-action="onboard" data-id="${esc(c.wa_id)}">${onboardCount(l) === ONBOARD_ITEMS.length ? "✓ All in" : `${onboardCount(l)}/${ONBOARD_ITEMS.length}`}</button></td>
             <td class="hide-sm"><input class="field" type="date" data-f="delivery_date" value="${esc(l.delivery_date ?? "")}"></td>
             <td><button class="btn small primary" data-save-client="${esc(c.wa_id)}">Save</button></td>
           </tr>`;
@@ -1109,10 +1152,10 @@ async function saveClient(id) {
     status: leadStatusFor(ps),
   };
   try {
-    await post("lead", { wa_id: id, ...payload });
+    const res = await post("lead", { wa_id: id, ...payload });
     const l = S.leads.get(id) || {};
     S.leads.set(id, { ...l, ...payload, agreed_price: payload.agreed_price ? Number(payload.agreed_price) : null, amount_paid: Number(payload.amount_paid) });
-    dirty(); render(); toast("Saved");
+    dirty(); render(); toast(res.sent ? "Saved. " + res.sent : "Saved");
   } catch (e) { if (e.message !== "unauthorized") toast(e.message); }
 }
 function downloadCsv(name, cols, rows) {
@@ -1189,7 +1232,8 @@ function renderStats() {
     ["Said what they want", all.filter((c) => c.lead?.website_goal || c.lead?.business_name).length],
     ["⭐ Quality lead", all.filter((c) => quality(c).is).length],
     ["Gave a budget", all.filter((c) => c.lead?.budget).length],
-    ["Deposit pending", all.filter((c) => c.lead?.status === "deposit").length],
+    ["📞 Call booked", new Set(callsList().map((x) => x.wa_id)).size],
+    ["Agreed (deposit pending or paid)", all.filter((c) => ["deposit", "won"].includes(c.lead?.status)).length],
     ["Paid", paid],
   ];
   const days = [...Array(14)].map((_, i) => {
@@ -1205,6 +1249,8 @@ function renderStats() {
   };
   $("#main").innerHTML = `
     <div class="page"><div class="page-inner">
+      ${scorecardHtml()}
+      <div class="qsection">All time</div>
       <div class="cards">
         <div class="card"><div class="num">${all.length}</div><div class="lbl">People who messaged</div></div>
         <div class="card"><div class="num">${newToday}</div><div class="lbl">New today</div></div>
@@ -1224,6 +1270,11 @@ function renderStats() {
         <div class="panel"><h3>Leads by offer</h3>${hlist(tally(leads.filter((c) => c.lead.offer), (c) => c.lead.offer))}</div>
         <div class="panel"><h3>Where chats come from</h3>${hlist(tally(all, (c) => source(c.lead)))}</div>
       </div>
+      <div class="panels" style="margin-top:12px">
+        <div class="panel"><h3>Why people didn't buy</h3>${lostReasonsHtml()}</div>
+        <div class="panel"><h3>Lead tiers (set by the bot)</h3>${hlist(tally(all.filter((c) => c.lead?.tier), (c) => ({ hot: "🔥 Hot", warm: "Warm", cold: "Cold" })[c.lead.tier]))}</div>
+        <div class="panel"><h3>Agents: agreed on calls</h3>${hlist(S.agents.map((a) => [a.name, agentStats(a).agreed]).filter(([, n]) => n))}</div>
+      </div>
       <p class="chat-sub" style="margin-top:14px">Your own number isn't counted. "Ad" means they tapped a WhatsApp ad; "Link" means one of your offer links or QR codes.</p>
     </div></div>`;
 }
@@ -1238,7 +1289,7 @@ document.addEventListener("click", (e) => {
   if (t.dataset.action === "close-sheet" && e.target !== t && !e.target.closest("button")) return; // clicks inside the sheet card
   if (t.dataset.view) { closeSheet(); setView(t.dataset.view); }
   else if (t.dataset.filter) { S.filter = t.dataset.filter; renderList(); }
-  else if (t.dataset.open) { if (!e.target.closest("select")) openChat(t.dataset.open); }
+  else if (t.dataset.open) { if (!e.target.closest("select")) { closeSheet(); openChat(t.dataset.open); } }
   else if (t.dataset.quick) fillQuick(Number(t.dataset.quick));
   else if (t.dataset.quality) setQuality(t.dataset.quality);
   else if (t.dataset.lstatus) { S.leadStatus = t.dataset.lstatus; renderLeads(); }
@@ -1254,7 +1305,8 @@ document.addEventListener("click", (e) => {
     remind: openReminder, "save-reminder": saveReminder, "close-sheet": closeSheet, "close-lightbox": closeSheet, settings: () => { closeSheet(); openSettings(); },
     "enable-push": enablePush, "test-push": testPush, logout: () => { closeSheet(); logout(); },
     "export-clients": exportClients, "export-leads": exportLeads,
-  }[t.dataset.action] || (() => {}))();
+    ...CALL_ACTIONS,
+  }[t.dataset.action] || (() => {}))(t);
 });
 
 document.addEventListener("change", (e) => {
@@ -1291,7 +1343,7 @@ navigator.serviceWorker?.addEventListener("message", (e) => { if (e.data?.openCh
 
 // ---------- login & start ----------
 function logout(message) {
-  S.key = ""; S.loaded = false; S.open = null;
+  S.key = ""; S.loaded = false; S.open = null; S.role = "";
   clearTimeout(pollTimer);
   store.del("crm_key"); store.del("crm_cache");
   $("#app").classList.add("hidden");
@@ -1318,8 +1370,10 @@ function start() {
   $("#app").classList.remove("hidden");
   renderNav();
   const chat = new URLSearchParams(location.search).get("chat");
-  if (chat && S.contacts.has(chat)) openChat(chat);
-  else render();
+  if (chat && S.contacts.has(chat)) {
+    if (S.role === "agent") { render(); history.replaceState(null, "", location.pathname); }
+    openChat(chat);
+  } else render();
   loop();
 }
 

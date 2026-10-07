@@ -192,6 +192,10 @@ function contacts() {
 }
 const dirty = () => { allCache = null; contactsCache = null; };
 const blocked = (c) => c.opted_out && c.handoff_reason === "Blocked";
+// Set by the bot when someone asks for money or writes in another language; it then stops using AI on them
+// (see isMoneyRequest / looksForeign in index.ts).
+const BOT_FLAGS = { "Asked for money": "🚫 Money", "Not English": "🌍 Not English" };
+const moneySeeker = (c) => !!BOT_FLAGS[c.lead?.lost_reason];
 const unread = (c) => !c.isOwner && c.lastCustomerAt && (!S.seen[c.wa_id] || new Date(c.lastCustomerAt) > new Date(S.seen[c.wa_id]));
 function hasLead(c) {
   const l = c.lead;
@@ -203,7 +207,7 @@ function quality(c) {
   const checks = [
     ["Said what they sell or do", !!(l.website_goal || l.business_name)],
     ["At least 2 real messages (not stickers or \"ok\")", c.realMessages >= 2],
-    ["Not asking for money, not flagged, not blocked", !c.askedMoney && !c.flagged && !blocked(c)],
+    ["Not asking for money, not flagged, not blocked", !c.askedMoney && !c.flagged && !blocked(c) && !moneySeeker(c)],
     ["Budget is ₦300,000 or more (if they gave one)", budget === null || budget >= MIN_PRICE],
     ["Didn't say the price is too much", !c.priceObjection],
   ];
@@ -495,7 +499,7 @@ function renderList() {
       c.isOwner ? `<span class="tag you">You</span>` : "",
       q.hot ? `<span class="tag hot">🔥 Hot</span>` : q.is ? `<span class="tag star">⭐</span>` : "",
       openCallFor(c.wa_id) ? `<span class="tag hot">📞</span>` : "",
-      c.lead?.tier === "cold" ? `<span class="tag cold">Cold</span>` : "",
+      moneySeeker(c) ? `<span class="tag need">${BOT_FLAGS[c.lead.lost_reason]}</span>` : c.lead?.tier === "cold" ? `<span class="tag cold">Cold</span>` : "",
       c.lead?.status === "deposit" ? `<span class="tag pay">💰 Pay</span>` : "",
       c.handoff && !blocked(c) ? `<span class="tag need">Needs you</span>` : "",
       c.flagged ? `<span class="tag need">⚠</span>` : "",
@@ -624,6 +628,7 @@ function renderChatParts({ keepComposer }) {
     const due = S.reminders.filter((r) => r.wa_id === c.wa_id && !r.done);
     banners.innerHTML = `
       ${c.isOwner ? "" : qualityLine(c)}
+      ${moneySeeker(c) ? `<div class="banner danger"><span class="tag need">${BOT_FLAGS[l.lost_reason]}</span> ${l.lost_reason === "Not English" ? "Wrote in another language. The bot sent one fixed \"please write in English\" reply and stays quiet (no AI credit used) until they write in English." : "Asked for money. The bot sent one fixed \"we can't help with money\" reply and now ignores this chat, so no AI credit is used."} <button class="btn small" style="margin-left:auto" data-action="unmute">Let the bot reply again</button></div>` : ""}
       ${callBanner(c.wa_id)}
       ${c.flagged ? `<div class="banner danger"><span class="tag need">⚠ Flagged</span> Sent what looks like a bank account or phone number: “${esc(c.flagged)}”. Often someone expecting money.</div>` : ""}
       ${c.handoff && c.handoff_reason && !OWNER_HANDOFFS.includes(c.handoff_reason) ? `<div class="banner"><span class="tag need">Why</span> ${esc(c.handoff_reason)}</div>` : ""}
@@ -825,6 +830,7 @@ async function act(fn, okText) {
 }
 const setHandoff = (on) => act(() => post("handoff", { wa_id: S.open, handoff: on }), on ? "You're handling this chat" : "Bot is replying again");
 const setQuality = (v) => act(() => post("lead", { wa_id: S.open, quality: v === "auto" ? null : v }));
+const unmute = () => act(() => post("lead", { wa_id: S.open, tier: null, lost_reason: null, status: "new" }), "The bot will reply to them again");
 async function setBlocked(block) {
   const c = contact(S.open);
   if (block && !confirm(`Block ${c?.lead?.name || c?.name || fmtPhone(S.open)}? They won't be able to message your WhatsApp number any more.`)) return;
@@ -1304,7 +1310,7 @@ document.addEventListener("click", (e) => {
     "delete-chat": deleteChat, "make-client": makeClient, "lead-save": saveLead, reopen: reopenChat, portfolio: openPortfolio,
     remind: openReminder, "save-reminder": saveReminder, "close-sheet": closeSheet, "close-lightbox": closeSheet, settings: () => { closeSheet(); openSettings(); },
     "enable-push": enablePush, "test-push": testPush, logout: () => { closeSheet(); logout(); },
-    "export-clients": exportClients, "export-leads": exportLeads,
+    "export-clients": exportClients, "export-leads": exportLeads, unmute,
     ...CALL_ACTIONS,
   }[t.dataset.action] || (() => {}))(t);
 });

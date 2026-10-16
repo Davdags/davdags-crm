@@ -16,6 +16,8 @@ const LEAD_FIELDS = [
   ["website_goal", "What they need"], ["budget", "Budget"], ["timeline", "Timeline"],
 ];
 const MIN_PRICE = 300000;
+// Smallest package: a budget below this isn't a quality lead.
+const QUALITY_MIN = 80000;
 // Handoffs you started yourself, not the bot asking you to quote.
 const OWNER_HANDOFFS = ["You replied from the CRM", "Taken over from the CRM", "Blocked"];
 
@@ -208,7 +210,7 @@ function quality(c) {
     ["Said what they sell or do", !!(l.website_goal || l.business_name)],
     ["At least 2 real messages (not stickers or \"ok\")", c.realMessages >= 2],
     ["Not asking for money, not flagged, not blocked", !c.askedMoney && !c.flagged && !blocked(c) && !moneySeeker(c)],
-    ["Budget is ₦300,000 or more (if they gave one)", budget === null || budget >= MIN_PRICE],
+    ["Budget is ₦80,000 or more (if they gave one)", budget === null || budget >= QUALITY_MIN],
     ["Didn't say the price is too much", !c.priceObjection],
   ];
   const auto = !c.isOwner && l.status !== "lost" && l.tier !== "cold" && checks.every(([, ok]) => ok);
@@ -217,7 +219,7 @@ function quality(c) {
   const hotWhy = [
     l.tier === "hot" && "bot marked hot",
     openCallFor(c.wa_id) && "call booked",
-    budget !== null && budget >= MIN_PRICE && "gave a budget",
+    budget !== null && budget >= QUALITY_MIN && "gave a budget",
     l.timeline && "gave a timeline",
     l.email && "gave an email",
     c.handoff && !OWNER_HANDOFFS.includes(c.handoff_reason) && "waiting for a quote",
@@ -1016,7 +1018,7 @@ function renderQuality() {
           <li>They said what they sell or do</li>
           <li>They sent at least 2 real messages (stickers, "ok" and "hi" don't count)</li>
           <li>They aren't asking for money, aren't flagged and aren't blocked</li>
-          <li>If they gave a budget, it's ₦300,000 or more</li>
+          <li>If they gave a budget, it's ₦80,000 or more (our smallest package)</li>
           <li>They didn't say the price is too much</li>
         </ol>
         <div class="chat-sub" style="margin-top:6px">🔥 Hot = also gave a budget, timeline or email, wants online payments, is ready to pay, or waiting for a quote. Open any chat to ⭐ add or ✕ remove someone by hand.</div>

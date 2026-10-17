@@ -534,6 +534,8 @@ function displayText(m) {
   if (x) return "🎤 " + x[1];
   x = body.match(/^\[Template: reopen_chat\] (.*)$/);
   if (x) return `📨 "Still interested?" message: Hi ${x[1]}, thanks for your interest in a website from DavDags. Are you still looking to get one?`;
+  x = body.match(/^\[Template: budget_checkin\] (.*)$/);
+  if (x) return `📨 Check-in message: Hi ${x[1]}, it's DavDags 👋 You asked about a website for your business. We now have packages for every budget, from ₦80,000. What's your budget?`;
   x = body.match(/^\[Re-open message\] ([\s\S]*)$/);
   if (x) return `📨 "Still interested?" message: ${x[1]}`;
   x = body.match(/^\[Template: owner_alert\] (.*)$/);

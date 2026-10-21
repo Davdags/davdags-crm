@@ -90,6 +90,7 @@ const S = {
   role: "", // "owner" or "agent", from the overview
   agents: [],
   calls: new Map(),
+  previews: new Map(), // wa_id → latest free website preview
   lostReasons: [],
   me: null, // the logged-in call agent
   closed: [],
@@ -254,6 +255,7 @@ function hydrate(d) {
   S.role = "owner";
   S.agents = d.agents || [];
   S.calls = new Map((d.calls || []).map((c) => [c.id, c]));
+  S.previews = new Map((d.previews || []).map((p) => [p.wa_id, p]));
   S.lostReasons = d.lostReasons || [];
   S.owner = d.owner;
   S.contacts = new Map((d.contacts || []).map((c) => [c.wa_id, c]));
@@ -287,6 +289,7 @@ async function poll() {
   for (const c of d.contacts || []) { S.contacts.set(c.wa_id, c); changed = true; }
   for (const l of d.leads || []) { S.leads.set(l.wa_id, l); changed = true; }
   for (const call of d.calls || []) { S.calls.set(call.id, call); changed = true; }
+  for (const pv of d.previews || []) { S.previews.set(pv.wa_id, pv); changed = true; }
   const incoming = [];
   let needOverview = false;
   for (const m of d.messages || []) {
@@ -534,6 +537,9 @@ function displayText(m) {
   if (x) return "🎤 " + x[1];
   x = body.match(/^\[Template: reopen_chat\] (.*)$/);
   if (x) return `📨 "Still interested?" message: Hi ${x[1]}, thanks for your interest in a website from DavDags. Are you still looking to get one?`;
+  x = body.match(/^\[Sent preview screenshot - (\S+)\]$/);
+  if (x) return `🖼 Preview screenshot
+${x[1]}`;
   x = body.match(/^\[Template: budget_checkin\] (.*)$/);
   if (x) return `📨 Check-in message: Hi ${x[1]}, it's DavDags 👋 You asked about a website for your business. We now have packages for every budget, from ₦80,000. What's your budget?`;
   x = body.match(/^\[Re-open message\] ([\s\S]*)$/);
@@ -616,6 +622,7 @@ function renderChatParts({ keepComposer }) {
       <button class="icon-btn" data-action="menu" aria-label="More">⋯</button>
       ${S.menuOpen ? `<div class="menu-list">
         ${c.isOwner ? "" : `<button data-action="book-call">📞 ${openCallFor(c.wa_id) ? "Move the call" : "Book a call"}</button>`}
+        ${c.isOwner ? "" : `<button data-action="preview-build">🖼 ${S.previews.get(c.wa_id) ? "Rebuild" : "Build"} free preview</button>`}
         <button data-action="remind">⏰ Set a reminder</button>
         ${l.project_status ? "" : `<button data-action="make-client">💼 Make client</button>`}
         <button data-action="portfolio">🖼 Send portfolio example</button>
@@ -634,6 +641,7 @@ function renderChatParts({ keepComposer }) {
       ${c.isOwner ? "" : qualityLine(c)}
       ${moneySeeker(c) ? `<div class="banner danger"><span class="tag need">${BOT_FLAGS[l.lost_reason]}</span> ${l.lost_reason === "Not English" ? "Wrote in another language. The bot sent one fixed \"please write in English\" reply and stays quiet (no AI credit used) until they write in English." : l.lost_reason === "One-word replies" ? "Only answers \"ok\"/\"yes\". The bot asked them once to say what their business does and stays quiet (no AI credit used) until they write something real. No call is booked for them." : "Asked for money. The bot sent one fixed \"we can't help with money\" reply and now ignores this chat, so no AI credit is used."} <button class="btn small" style="margin-left:auto" data-action="unmute">Let the bot reply again</button></div>` : ""}
       ${callBanner(c.wa_id)}
+      ${previewBanner(c.wa_id)}
       ${c.flagged ? `<div class="banner danger"><span class="tag need">⚠ Flagged</span> Sent what looks like a bank account or phone number: “${esc(c.flagged)}”. Often someone expecting money.</div>` : ""}
       ${c.handoff && c.handoff_reason && !OWNER_HANDOFFS.includes(c.handoff_reason) ? `<div class="banner"><span class="tag need">Why</span> ${esc(c.handoff_reason)}</div>` : ""}
       ${due.map((r) => `<div class="banner"><span class="tag you">⏰ ${esc(endsLabel(new Date(r.due_at)))}</span> ${esc(r.note || "Follow up")} <button class="btn small" style="margin-left:auto" data-reminder-done="${r.id}">Done</button></div>`).join("")}
@@ -834,6 +842,31 @@ async function act(fn, okText) {
 }
 const setHandoff = (on) => act(() => post("handoff", { wa_id: S.open, handoff: on }), on ? "You're handling this chat" : "Bot is replying again");
 const setQuality = (v) => act(() => post("lead", { wa_id: S.open, quality: v === "auto" ? null : v }));
+// Free website previews: built from the customer's photos, checked by the owner, then sent.
+const PREVIEW_SITE = "https://preview.davdags.com/";
+function previewBanner(waId) {
+  const pv = S.previews.get(waId);
+  if (!pv) return "";
+  const open = `<a class="btn small" href="${PREVIEW_SITE}${esc(pv.slug)}" target="_blank" rel="noopener">Open</a>`;
+  const body = {
+    building: `Building the free preview… (about a minute)`,
+    ready: `Preview ready. Check it, then send it. <span style="margin-left:auto;display:flex;gap:6px">${open}<button class="btn small" data-action="preview-build">Rebuild</button><button class="btn small primary" data-action="preview-send">Send to client</button></span>`,
+    sent: `Preview sent ${esc(when(pv.sent_at))}. <span style="margin-left:auto;display:flex;gap:6px">${open}</span>`,
+    failed: `Preview failed: ${esc(pv.error || "unknown error")} <span style="margin-left:auto"><button class="btn small" data-action="preview-build">Try again</button></span>`,
+  }[pv.status] || "";
+  return `<div class="banner"><span class="tag ${pv.status === "failed" ? "need" : "hot"}">🖼 Preview</span> ${body}</div>`;
+}
+async function buildPreview() {
+  S.menuOpen = false;
+  if (!confirm("Build a free website preview from the photos this customer sent? It uses their photos, product names and prices from the chat.")) return;
+  S.previews.set(S.open, { ...(S.previews.get(S.open) || { wa_id: S.open, slug: "" }), status: "building" });
+  act(() => post("preview-build", { wa_id: S.open }), "Building the preview. You'll get an alert when it's ready.");
+}
+async function sendPreviewToClient() {
+  if (!confirm("Send this preview to the customer on WhatsApp (screenshot + link) and book a closing call?")) return;
+  try { const res = await post("preview-send", { wa_id: S.open }); toast(res.message || "Sent"); await poll().catch(() => {}); dirty(); refreshAfterChange(); }
+  catch (e) { if (e.message !== "unauthorized") toast(e.message); }
+}
 const unmute = () => act(() => post("lead", { wa_id: S.open, tier: null, lost_reason: null, status: "new" }), "The bot will reply to them again");
 async function setBlocked(block) {
   const c = contact(S.open);
@@ -1315,6 +1348,7 @@ document.addEventListener("click", (e) => {
     remind: openReminder, "save-reminder": saveReminder, "close-sheet": closeSheet, "close-lightbox": closeSheet, settings: () => { closeSheet(); openSettings(); },
     "enable-push": enablePush, "test-push": testPush, logout: () => { closeSheet(); logout(); },
     "export-clients": exportClients, "export-leads": exportLeads, unmute,
+    "preview-build": buildPreview, "preview-send": sendPreviewToClient,
     ...CALL_ACTIONS,
   }[t.dataset.action] || (() => {}))(t);
 });

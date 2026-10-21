@@ -1,6 +1,6 @@
 // DavDags CRM service worker: opens instantly (cached app shell) and shows phone notifications.
-const CACHE = "davdags-crm-v11";
-const SHELL = ["./", "index.html", "styles.css?v=5", "calls.js?v=5", "app.js?v=11", "manifest.webmanifest", "icons/icon-192.png", "icons/favicon-64.png"];
+const CACHE = "davdags-crm-v12";
+const SHELL = ["./", "index.html", "styles.css?v=5", "calls.js?v=5", "app.js?v=12", "manifest.webmanifest", "icons/icon-192.png", "icons/favicon-64.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

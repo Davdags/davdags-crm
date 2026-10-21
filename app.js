@@ -843,7 +843,7 @@ async function act(fn, okText) {
 const setHandoff = (on) => act(() => post("handoff", { wa_id: S.open, handoff: on }), on ? "You're handling this chat" : "Bot is replying again");
 const setQuality = (v) => act(() => post("lead", { wa_id: S.open, quality: v === "auto" ? null : v }));
 // Free website previews: built from the customer's photos, checked by the owner, then sent.
-const PREVIEW_SITE = "https://preview.davdags.com/";
+const PREVIEW_SITE = "https://preview.davdags.com/?s=";
 function previewBanner(waId) {
   const pv = S.previews.get(waId);
   if (!pv) return "";

@@ -33,11 +33,11 @@ function looksLikeAccountNumber(text) {
 
 // One-tap replies; they fill the box so you can edit before sending. {name} and {payment} are filled in.
 const QUICK_REPLIES = [
-  { label: "💼 Package & price", text: "Hi {name}! Our business website package starts from ₦300,000. It includes up to 30 products (or 5 pages), WhatsApp order buttons, a logo if you need one, domain and hosting for the first year, a mobile-friendly design and 2 rounds of changes. It's ready in 5 working days after we get your photos and prices. Shall we book your slot?" },
-  { label: "💰 Budget?", text: "What budget do you have in mind for the website, {name}? Tell me and I'll put together the best option for you." },
-  { label: "🏦 Deposit details", text: "Great, let's get started! 🎉 To book your slot, please pay the 50% deposit of ₦150,000 to:\n\n{payment}\n\nSend the receipt here once done, and we'll start right away." },
-  { label: "⏰ Follow up", text: "Hi {name}, just checking in. Would you like us to go ahead with your website? I can hold a slot for you this week." },
-  { label: "✅ Payment received", text: "Deposit received, thank you {name}! 🙌 Please send your product photos with prices, any text you'd like on the site, and your logo if you have one (if not, we'll design it for you). You'll get a preview to approve within 5 working days, and the balance is due before the site goes live." },
+  { label: "💼 Package & price", text: "Hi {name}! Our Order-Ready Store is ₦150,000: one link where customers see all your products and prices and order straight on WhatsApp. It comes with WhatsApp catalogue setup, a Google Maps listing and launch graphics. You see a preview in 3 working days, or your deposit back. Shall I book your slot?" },
+  { label: "💰 Budget?", text: "Kindly confirm how much you can pay one time to have your website built, {name}. We have packages from ₦80,000." },
+  { label: "🏦 Deposit details", text: "Great, let's get started! 🎉 To book your slot, please pay the 50% deposit to:\n\n{payment}\n\nSend the receipt here once done. You'll see your preview within 3 working days of sending your photos and prices." },
+  { label: "⏰ Follow up", text: "Hi {name}, just checking in. We take only 5 builds a week. Shall I book your slot for this week?" },
+  { label: "✅ Payment received", text: "Deposit received, thank you {name}! 🙌 Please send your product photos with names and prices, your business details (phone, address, social handles) and your logo if you have one. Your preview will be ready within 3 working days of receiving them, and the balance is due after you approve it." },
 ];
 
 const VIEWS = [

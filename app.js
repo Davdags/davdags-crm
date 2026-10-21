@@ -4,10 +4,10 @@
 
 const API = "https://soxevflmqepqbritrpnl.supabase.co/functions/v1/whatsapp/crm/";
 const VAPID_PUBLIC_KEY = "BCtPdOq8THqzILdS4TS8J5TkRLKXL52p9ByMlsflTjBV7bjJrgRWYcFVtWAXvJkTIC3MoK5NfSimg210S7rZ-Ww";
-const POLL_VISIBLE_MS = 3000;
-const POLL_HIDDEN_MS = 20000;
+const POLL_VISIBLE_MS = 5000; // Supabase free plan: keeps CRM calls well under the monthly limit
+const POLL_HIDDEN_MS = 60000;
 const FULL_REFRESH_MS = 5 * 60 * 1000;
-const AGENT_POLL_MS = 15000;
+const AGENT_POLL_MS = 30000;
 
 const STATUS = { new: "New", qualified: "Quoted", deposit: "Deposit pending", won: "Paid", lost: "Lost" };
 const PROJECT_STATUSES = ["Deposit pending", "Deposit paid", "In progress", "Preview sent", "Delivered", "Fully paid", "Cancelled"];

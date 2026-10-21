@@ -42,41 +42,80 @@ function tierTag(l) {
 }
 
 // ---------- call cards ----------
+const RESULT_BUTTONS = [["agreed", "✅ Agreed"], ["callback", "📅 Later"], ["no_answer", "📵 No answer"], ["lost", "❌ Not buying"]];
+const FORM_KEYS = ["Budget", "Want built", "Business", "Running", "Makes per month", "Start"];
+
+// The quote form's answers ("Key: value" lines). Agents see these instead of the chat.
+function formFacts(waId) {
+  const facts = {};
+  for (const line of String(S.forms?.[waId] || "").split("\n")) {
+    const m = line.match(/^([^:]{2,20}):\s*(.+)$/);
+    if (m && FORM_KEYS.includes(m[1].trim())) facts[m[1].trim()] = m[2].trim();
+  }
+  return facts;
+}
+function previewLink(waId) {
+  const pv = S.previews?.get(waId);
+  return pv && ["ready", "sent"].includes(pv.status) && pv.slug ? `https://preview.davdags.com/?s=${encodeURIComponent(pv.slug)}` : "";
+}
+
 function callCard(call) {
   const l = S.leads.get(call.wa_id) || {};
   const done = call.status !== "booked";
   const overdue = !done && new Date(call.due_at) < new Date(Date.now() - 10 * 60e3);
   const dueTxt = done
     ? `${esc(OUTCOMES[call.outcome] || (call.status === "cancelled" ? "Cancelled" : "Done"))}`
-    : overdue ? `Overdue · was ${esc(endsLabel(new Date(call.due_at)))}`
+    : overdue ? `Overdue · ${esc(endsLabel(new Date(call.due_at)))}`
     : callIsDue(call) ? "Call now" : esc(endsLabel(new Date(call.due_at)));
-  const need = [l.website_goal || l.offer, l.business_name && "Business: " + l.business_name, l.budget && "Budget: " + l.budget]
-    .filter(Boolean).map(esc).join(" · ");
   const owner = !isAgent();
-  return `<div class="ccard ${overdue ? "overdue" : ""} ${done ? "done" : ""}">
+  const facts = formFacts(call.wa_id);
+  if (!facts.Budget && l.budget) facts.Budget = l.budget;
+  if (!facts["Want built"] && (l.website_goal || l.offer)) facts["Want built"] = l.website_goal || l.offer;
+  if (!facts.Business && l.business_name) facts.Business = l.business_name;
+  const factHtml = FORM_KEYS.filter((k) => facts[k]).map((k) => `<div><span>${esc(k)}</span>${esc(facts[k])}</div>`).join("");
+  const pv = previewLink(call.wa_id);
+  return `<div class="ccard ${overdue ? "overdue" : ""} ${done ? "done" : ""}" data-card-wa="${esc(call.wa_id)}">
     <div class="ccard-top">
-      <strong>${esc(personName(call.wa_id))}</strong> ${tierTag(l)}
+      <strong class="ccard-name">${esc(personName(call.wa_id))}</strong> ${tierTag(l)}
       <span class="when ${overdue || (!done && callIsDue(call)) ? "urgent" : done ? "closed" : ""}" style="margin-left:auto">${dueTxt}</span>
     </div>
     <div class="chat-sub">${esc(fmtPhone(call.wa_id))}${owner ? ` · ${call.agent_id ? "👤 " + esc(agentName(call.agent_id)) : "No agent"}` : ""}</div>
-    ${call.summary ? `<div class="ccard-sum">${esc(call.summary)}</div>` : ""}
-    ${need ? `<div class="chat-sub">${need}</div>` : ""}
+    ${factHtml ? `<div class="facts">${factHtml}</div>` : ""}
+    ${call.summary ? `<div class="ccard-sum">📝 ${esc(call.summary)}</div>` : ""}
     ${call.preferred_time && !done ? `<div class="chat-sub">They said: “${esc(call.preferred_time)}”</div>` : ""}
     ${call.attempts && !done ? `<div class="chat-sub">📵 No answer ${call.attempts}×</div>` : ""}
     ${done && call.outcome_note ? `<div class="chat-sub">📝 ${esc(call.outcome_note)}</div>` : ""}
-    ${done ? "" : `<div class="ccard-actions">
-      <a class="btn small primary" href="tel:+${esc(call.wa_id)}">📞 Call</a>
-      <a class="btn small" href="https://wa.me/${esc(call.wa_id)}" target="_blank" rel="noopener">🟢 WhatsApp</a>
-      <button class="btn small" ${owner ? `data-open="${esc(call.wa_id)}"` : `data-action="chat-view" data-id="${esc(call.wa_id)}"`}>💬 Chat</button>
-      <button class="btn small primary" data-action="call-result" data-id="${call.id}">Log result</button>
-      ${owner ? `<select class="field assign" data-assign="${call.id}">
-        <option value="">No agent (me)</option>
-        ${S.agents.filter((a) => a.active || a.id === call.agent_id).map((a) => `<option value="${a.id}" ${a.id === call.agent_id ? "selected" : ""}>👤 ${esc(a.name)}</option>`).join("")}
-      </select>
-      <button class="btn small ghost danger" data-action="cancel-call" data-id="${call.id}">Cancel</button>` : ""}
-    </div>`}
+    ${pv ? `<a class="pv-link" href="${esc(pv)}" target="_blank" rel="noopener">🖼 Open their free preview</a>` : ""}
+    ${done ? "" : `
+      <div class="ccard-actions">
+        <a class="btn big primary" href="tel:+${esc(call.wa_id)}" data-dial="${call.id}">📞 Call</a>
+        <a class="btn big" href="https://wa.me/${esc(call.wa_id)}" target="_blank" rel="noopener">🟢 WhatsApp</a>
+      </div>
+      <div class="result-row">${RESULT_BUTTONS.map(([k, label]) => `<button class="btn" data-action="call-result" data-id="${call.id}" data-outcome="${k}">${label}</button>`).join("")}</div>
+      ${owner ? `<div class="ccard-actions owner">
+        <button class="btn small" data-open="${esc(call.wa_id)}">💬 Chat</button>
+        <select class="field assign" data-assign="${call.id}">
+          <option value="">No agent (me)</option>
+          ${S.agents.filter((a) => a.active || a.id === call.agent_id).map((a) => `<option value="${a.id}" ${a.id === call.agent_id ? "selected" : ""}>👤 ${esc(a.name)}</option>`).join("")}
+        </select>
+        <button class="btn small ghost danger" data-action="cancel-call" data-id="${call.id}">Cancel call</button>
+      </div>` : ""}`}
   </div>`;
 }
+
+// After a tap on 📞 Call, ask "How did it go?" as soon as they come back to the app, so nothing goes unlogged.
+document.addEventListener("click", (e) => {
+  const a = e.target.closest?.("[data-dial]");
+  if (a) store.set("crm_last_dial", { id: Number(a.dataset.dial), at: Date.now() });
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden || !S.loaded) return;
+  const d = store.get("crm_last_dial", null);
+  if (!d || Date.now() - d.at < 8000 || Date.now() - d.at > 3 * 3600e3) return;
+  store.del("crm_last_dial");
+  const call = S.calls.get(d.id);
+  if (call && call.status === "booked") openCallResult({ dataset: { id: String(d.id) } });
+});
 
 function callSections(list) {
   const open = list.filter((c) => c.status === "booked").sort(byDue);
@@ -123,13 +162,16 @@ function openCallResult(t) {
       <button class="btn" data-action="close-sheet">Cancel</button>
       <button class="btn primary" data-action="save-outcome" data-id="${call.id}">Save</button>
     </div>`);
+  const pre = t.dataset.outcome && $(`.outcomes [data-id="${t.dataset.outcome}"]`);
+  if (pre) pickOutcome(pre);
 }
 function pickOutcome(t) {
   outcomeChoice = t.dataset.id;
   $$(".outcomes .btn").forEach((b) => b.classList.toggle("primary", b === t));
   const call = S.calls.get(Number($('[data-action="save-outcome"]').dataset.id));
   const l = S.leads.get(call?.wa_id) || {};
-  const guess = l.agreed_price || (budgetNaira(l.budget) >= MIN_PRICE ? budgetNaira(l.budget) : MIN_PRICE);
+  // Guess from their confirmed budget (packages are ₦80k / ₦150k / ₦300k), or their form answer.
+  const guess = l.agreed_price || budgetNaira(l.budget) || budgetNaira(formFacts(call?.wa_id).Budget) || 150000;
   $("#outcome-extra").innerHTML = {
     agreed: `<label class="chat-sub">Agreed price (₦)</label>
       <input class="field" id="outcome-price" inputmode="numeric" value="${esc(guess)}">
@@ -239,17 +281,42 @@ function callBanner(waId) {
 }
 
 // ---------- owner: Team page ----------
+// Founder, 21 Oct: the whole month's money received earns base + bonus once it passes each level.
+const COMMISSION_LEVELS = [[1_500_000, 5], [5_000_000, 10], [10_000_000, 15]];
+function commissionRate(total, base) {
+  let rate = Number(base) || 10;
+  for (const [min, bonus] of COMMISSION_LEVELS) if (total >= min) rate = (Number(base) || 10) + bonus;
+  return rate;
+}
+function monthlyCommission(leads, base) {
+  const months = {};
+  for (const l of leads) if (l.amount_paid) { const m = String(l.paid_at || l.updated_at || "").slice(0, 7); months[m] = (months[m] || 0) + l.amount_paid; }
+  const thisMonth = months[new Date().toISOString().slice(0, 7)] || 0;
+  const earned = Object.values(months).reduce((t, v) => t + (v * commissionRate(v, base)) / 100, 0);
+  return { earned: Math.round(earned), thisMonth, rate: commissionRate(thisMonth, base) };
+}
+function milestoneHtml(total, base) {
+  const next = COMMISSION_LEVELS.find(([min]) => total < min);
+  const rate = commissionRate(total, base);
+  if (!next) return `<div class="meter"><div class="meter-top"><b>${naira(total)}</b> this month · <b>${rate}%</b> 🏆 top level</div><div class="meter-bar"><i style="width:100%"></i></div></div>`;
+  const prev = [...COMMISSION_LEVELS].reverse().find(([min]) => total >= min)?.[0] || 0;
+  const pct = Math.min(100, ((total - prev) / (next[0] - prev)) * 100);
+  return `<div class="meter"><div class="meter-top"><b>${naira(total)}</b> this month · earning <b>${rate}%</b></div>
+    <div class="meter-bar"><i style="width:${pct}%"></i></div>
+    <div class="chat-sub">${naira(next[0] - total)} more to reach ${naira(next[0])} → <b>${(Number(base) || 10) + next[1]}%</b> on the whole month</div></div>`;
+}
+
 function agentStats(a) {
   const calls = callsList().filter((c) => c.agent_id === a.id);
   const done = calls.filter((c) => c.status === "done" && c.outcome && c.outcome !== "callback");
   const agreed = done.filter((c) => c.outcome === "agreed").length;
   const clients = [...S.leads.values()].filter((l) => l.agent_id === a.id);
   const received = clients.reduce((t, l) => t + (l.amount_paid || 0), 0);
-  const earned = Math.round((received * Number(a.commission_pct)) / 100);
+  const pay = monthlyCommission(clients, a.commission_pct);
   return {
     open: calls.filter((c) => c.status === "booked").length, done: done.length, agreed,
     rate: done.length ? Math.round((agreed / done.length) * 100) + "%" : "—",
-    received, earned, owed: Math.max(0, earned - (a.paid_out || 0)),
+    received, earned: pay.earned, owed: Math.max(0, pay.earned - (a.paid_out || 0)), thisMonth: pay.thisMonth, monthRate: pay.rate,
   };
 }
 function renderTeam() {
@@ -264,14 +331,14 @@ function renderTeam() {
           <input class="field" id="agent-pct" value="10" inputmode="decimal" title="Commission %" style="max-width:90px">
           <button class="btn primary" data-action="add-agent">Add agent</button>
         </div>
-        <div class="chat-sub" style="margin-top:6px">Commission % is paid on the money that comes in from clients they close. Each agent gets an 8-digit code to log in at <b>crm.davdags.com</b>. They only see their own calls.</div>
+        <div class="chat-sub" style="margin-top:6px">Commission is paid on the money that comes in from clients they close: the base % (usually 10%), then 15% on the whole month once they pass ₦1.5m, 20% past ₦5m and 25% past ₦10m. Each agent gets an 8-digit code to log in at <b>crm.davdags.com</b>. They only see their own calls.</div>
       </div>
       ${rows.length ? `<table>
         <thead><tr><th>Agent</th><th>Open calls</th><th class="hide-sm">Calls done</th><th>Agreed</th><th class="hide-sm">Close rate</th><th class="hide-sm">Money in</th><th>Commission owed</th><th></th></tr></thead>
         <tbody>${rows.map(({ a, s }) => `<tr class="${a.active ? "" : "inactive"}">
           <td><strong>${esc(a.name)}</strong>${a.active ? "" : ` <span class="tag cold">Off</span>`}<div class="chat-sub">${esc(a.phone || "")} · ${esc(a.commission_pct)}%</div></td>
           <td>${s.open}</td><td class="hide-sm">${s.done}</td><td>${s.agreed}</td><td class="hide-sm">${s.rate}</td>
-          <td class="hide-sm">${naira(s.received)}</td>
+          <td class="hide-sm">${naira(s.received)}<div class="chat-sub">this month ${naira(s.thisMonth)} · ${s.monthRate}%</div></td>
           <td><strong>${naira(s.owed)}</strong><div class="chat-sub">paid ${naira(a.paid_out || 0)}</div></td>
           <td><div class="row-actions">
             <button class="btn small" data-action="agent-payout" data-id="${a.id}">Record payout</button>
@@ -410,7 +477,22 @@ function lostReasonsHtml() {
 
 // ---------- the call agent's CRM ----------
 function hydrateAgent(d) {
+  // A new call for this agent: sound + banner, even if they're on another screen.
+  const booked = (d.calls || []).filter((c) => c.status === "booked").map((c) => c.id);
+  if (S.role === "agent" && S.knownCalls) {
+    const fresh = booked.filter((id) => !S.knownCalls.has(id));
+    if (fresh.length) {
+      const c = (d.calls || []).find((x) => x.id === fresh[0]);
+      const who = (d.leads || []).find((l) => l.wa_id === c?.wa_id)?.name || (d.contacts || []).find((x) => x.wa_id === c?.wa_id)?.name || "a customer";
+      ding(); try { navigator.vibrate?.([200, 100, 200]); } catch {}
+      toast(`📞 New call: ${who}`);
+    }
+  }
+  S.knownCalls = new Set(booked);
   S.role = "agent";
+  S.forms = d.forms || {};
+  S.previews = new Map((d.previews || []).map((p) => [p.wa_id, p]));
+  S.monthTotal = d.monthTotal || 0;
   S.me = d.agent;
   S.calls = new Map((d.calls || []).map((c) => [c.id, c]));
   S.contacts = new Map((d.contacts || []).map((c) => [c.wa_id, c]));
@@ -425,9 +507,18 @@ function hydrateAgent(d) {
   dirty();
 }
 function renderMyCalls() {
+  const list = callsList();
+  const today0 = new Date(new Date().toDateString());
+  const dueNow = list.filter((c) => c.status === "booked" && callIsDue(c)).length;
+  const doneToday = list.filter((c) => c.status !== "booked" && c.completed_at && new Date(c.completed_at) >= today0).length;
   $("#main").innerHTML = `<div class="page"><div class="page-inner narrow">
-    <div class="hello">Hi ${esc(firstWord(S.me?.name))} 👋 Call each customer when it's time, then tap <b>Log result</b>.</div>
-    ${callSections(callsList())}
+    <div class="myday">
+      <div class="stat"><b>${dueNow}</b><span>Call now</span></div>
+      <div class="stat"><b>${doneToday}</b><span>Done today</span></div>
+      <div class="stat"><b>${naira(S.owed)}</b><span>Owed to you</span></div>
+    </div>
+    ${milestoneHtml(S.monthTotal || 0, S.me?.commission_pct)}
+    ${callSections(list)}
   </div></div>`;
 }
 function renderMyDone() {
@@ -444,11 +535,12 @@ function renderEarnings() {
   $("#main").innerHTML = `<div class="page"><div class="page-inner narrow">
     <div class="cards">
       <div class="card"><div class="num">${naira(S.owed)}</div><div class="lbl">Owed to you</div></div>
-      <div class="card"><div class="num">${naira(S.earned)}</div><div class="lbl">Earned so far (${esc(S.me?.commission_pct)}%)</div></div>
+      <div class="card"><div class="num">${naira(S.earned)}</div><div class="lbl">Earned so far</div></div>
       <div class="card"><div class="num">${naira(S.me?.paid_out || 0)}</div><div class="lbl">Paid to you</div></div>
       <div class="card"><div class="num">${month.length ? Math.round((agreed / month.length) * 100) + "%" : "—"}</div><div class="lbl">Close rate this month (${agreed}/${month.length})</div></div>
     </div>
-    <div class="chat-sub" style="margin-bottom:10px">You earn ${esc(S.me?.commission_pct)}% of the money each of your clients pays, as it comes in.</div>
+    ${milestoneHtml(S.monthTotal || 0, S.me?.commission_pct)}
+    <div class="chat-sub" style="margin:10px 0">You earn ${esc(S.me?.commission_pct)}% of the money your clients pay. Pass ₦1.5m in a month and the whole month pays 15%, past ₦5m 20%, past ₦10m 25%.</div>
     ${S.closed.length ? `<table><thead><tr><th>Client</th><th>Agreed</th><th>Paid</th><th class="hide-sm">Status</th></tr></thead><tbody>
       ${S.closed.map((l) => `<tr><td>${esc(l.name || fmtPhone(l.wa_id))}</td><td>${naira(l.agreed_price)}</td><td>${naira(l.amount_paid || 0)}</td><td class="hide-sm">${esc(l.project_status || "")}</td></tr>`).join("")}
     </tbody></table>` : `<div class="empty">Clients you close will show here.</div>`}
@@ -456,23 +548,16 @@ function renderEarnings() {
 }
 const firstWord = (s) => String(s || "").trim().split(/\s+/)[0];
 
-// Read-only chat for agents (and context before a call).
-async function openChatSheet(waId) {
-  sheet(`<h3>💬 ${esc(personName(waId))} <span class="chat-sub">${esc(fmtPhone(waId))}</span></h3>
-    <div class="messages sheet-msgs" id="sheet-msgs"><div class="pick">Loading…</div></div>
-    <div style="margin-top:10px;display:flex;gap:8px;justify-content:flex-end">
-      <a class="btn" href="tel:+${esc(waId)}">📞 Call</a>
-      <button class="btn primary" data-action="close-sheet">Close</button>
-    </div>`);
-  try {
-    const msgs = await api("messages?wa_id=" + encodeURIComponent(waId));
-    S.messages = msgs;
-    const box = $("#sheet-msgs");
-    if (!box) return;
-    box.innerHTML = msgs.map(bubble).join("") || `<div class="pick">No messages.</div>`;
-    hydrateMedia(box);
-    box.scrollTop = box.scrollHeight;
-  } catch (e) { if (e.message !== "unauthorized") toast(e.message); }
+// Agents can't read chats (founder, 21 Oct). Opening a lead (e.g. from a notification) jumps to its call card.
+function openChatSheet(waId) {
+  if (S.view !== "mycalls") setView("mycalls");
+  setTimeout(() => {
+    const card = $(`[data-card-wa="${CSS.escape(waId)}"]`);
+    if (!card) return toast("That call isn't on your list any more.");
+    card.scrollIntoView({ behavior: "smooth", block: "center" });
+    card.classList.add("flash");
+    setTimeout(() => card.classList.remove("flash"), 2500);
+  }, 50);
 }
 
 // Actions used from the shared click handler in app.js (buttons use data-action + data-id).

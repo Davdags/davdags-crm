@@ -269,7 +269,10 @@ tr.inactive td { opacity: .6; }
 .result-row .btn { padding: 8px 4px; font-size: 13.5px; min-height: 46px; }
 .ccard-actions.owner { border-top: 1px dashed var(--line); padding-top: 10px; }
 .ccard.flash { outline: 3px solid var(--brand); outline-offset: 2px; }
-.myday { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px; }
+.ccard.pool { border-color: var(--brand); border-style: dashed; }
+.ccard.pool .ccard-actions .btn { width: 100%; }
+.myday { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 12px; }
+@media (max-width: 420px) { .myday { grid-template-columns: repeat(2, 1fr); } }
 .myday .stat { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; text-align: center; box-shadow: var(--shadow); }
 .myday .stat b { display: block; font-size: 22px; }
 .myday .stat span { color: var(--muted); font-size: 13px; }

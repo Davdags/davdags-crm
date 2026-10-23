@@ -46,14 +46,20 @@ const RESULT_BUTTONS = [["agreed", "✅ Agreed"], ["callback", "📅 Later"], ["
 const FORM_KEYS = ["Budget", "Want built", "Business", "Running", "Makes per month", "Start"];
 
 // The quote form's answers ("Key: value" lines). Agents see these instead of the chat.
-function formFacts(waId) {
+function formFactsFrom(text, lead = {}) {
   const facts = {};
-  for (const line of String(S.forms?.[waId] || "").split("\n")) {
+  for (const line of String(text || "").split("\n")) {
     const m = line.match(/^([^:]{2,20}):\s*(.+)$/);
     if (m && FORM_KEYS.includes(m[1].trim())) facts[m[1].trim()] = m[2].trim();
   }
+  if (!facts.Budget && lead.budget) facts.Budget = lead.budget;
+  if (!facts["Want built"] && (lead.website_goal || lead.offer)) facts["Want built"] = lead.website_goal || lead.offer;
+  if (!facts.Business && lead.business_name) facts.Business = lead.business_name;
   return facts;
 }
+const formFacts = (waId) => formFactsFrom(S.forms?.[waId]);
+const factsHtml = (facts) => FORM_KEYS.filter((k) => facts[k]).map((k) => `<div><span>${esc(k)}</span>${esc(facts[k])}</div>`).join("");
+const shortDate = (iso) => new Date(iso).toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" });
 function previewLink(waId) {
   const pv = S.previews?.get(waId);
   return pv && ["ready", "sent"].includes(pv.status) && pv.slug ? `https://preview.davdags.com/?s=${encodeURIComponent(pv.slug)}` : "";
@@ -68,18 +74,15 @@ function callCard(call) {
     : overdue ? `Overdue · ${esc(endsLabel(new Date(call.due_at)))}`
     : callIsDue(call) ? "Call now" : esc(endsLabel(new Date(call.due_at)));
   const owner = !isAgent();
-  const facts = formFacts(call.wa_id);
-  if (!facts.Budget && l.budget) facts.Budget = l.budget;
-  if (!facts["Want built"] && (l.website_goal || l.offer)) facts["Want built"] = l.website_goal || l.offer;
-  if (!facts.Business && l.business_name) facts.Business = l.business_name;
-  const factHtml = FORM_KEYS.filter((k) => facts[k]).map((k) => `<div><span>${esc(k)}</span>${esc(facts[k])}</div>`).join("");
+  const factHtml = factsHtml(formFactsFrom(S.forms?.[call.wa_id], l));
   const pv = previewLink(call.wa_id);
+  const held = !done && l.owner_until && new Date(l.owner_until) > new Date() && l.owner_agent_id === call.agent_id;
   return `<div class="ccard ${overdue ? "overdue" : ""} ${done ? "done" : ""}" data-card-wa="${esc(call.wa_id)}">
     <div class="ccard-top">
       <strong class="ccard-name">${esc(personName(call.wa_id))}</strong> ${tierTag(l)}
       <span class="when ${overdue || (!done && callIsDue(call)) ? "urgent" : done ? "closed" : ""}" style="margin-left:auto">${dueTxt}</span>
     </div>
-    <div class="chat-sub">${esc(fmtPhone(call.wa_id))}${owner ? ` · ${call.agent_id ? "👤 " + esc(agentName(call.agent_id)) : "No agent"}` : ""}</div>
+    <div class="chat-sub">${esc(fmtPhone(call.wa_id))}${owner ? ` · ${call.agent_id ? "👤 " + esc(agentName(call.agent_id)) : "🟢 Open list"}` : ""}${held ? ` · 🔒 ${owner ? "theirs" : "yours"} until ${esc(shortDate(l.owner_until))}` : ""}</div>
     ${factHtml ? `<div class="facts">${factHtml}</div>` : ""}
     ${call.summary ? `<div class="ccard-sum">📝 ${esc(call.summary)}</div>` : ""}
     ${call.preferred_time && !done ? `<div class="chat-sub">They said: “${esc(call.preferred_time)}”</div>` : ""}
@@ -95,7 +98,7 @@ function callCard(call) {
       ${owner ? `<div class="ccard-actions owner">
         <button class="btn small" data-open="${esc(call.wa_id)}">💬 Chat</button>
         <select class="field assign" data-assign="${call.id}">
-          <option value="">No agent (me)</option>
+          <option value="">🟢 Open list (first agent to take it)</option>
           ${S.agents.filter((a) => a.active || a.id === call.agent_id).map((a) => `<option value="${a.id}" ${a.id === call.agent_id ? "selected" : ""}>👤 ${esc(a.name)}</option>`).join("")}
         </select>
         <button class="btn small ghost danger" data-action="cancel-call" data-id="${call.id}">Cancel call</button>
@@ -138,7 +141,7 @@ function renderCalls() {
     <div class="page"><div class="page-inner narrow">
       <div class="criteria" style="margin-bottom:6px">
         <strong>How calls work</strong>
-        <div class="chat-sub" style="margin-top:4px">The bot books a call when a hot lead agrees to talk. The next free agent gets an alert on their phone, calls, then taps <b>Log result</b>. On ✅ Agreed the customer automatically gets a recap with the bank details. You can also book a call from any chat (⋯ → 📞 Book a call).</div>
+        <div class="chat-sub" style="margin-top:4px">The bot books a call when a lead agrees to talk or goes quiet for 30 minutes. New calls go on the <b>open list</b> and every agent gets an alert. The first to tap <b>Take it</b> gets the client for 7 days, but must log a result within 30 minutes or it goes back on the list. Repeat calls with that client go straight to them. Paying clients stay with the agent who closed them. On ✅ Agreed the customer automatically gets a recap with the bank details. To take calls yourself, add yourself on the Team page and log in with your own code.</div>
         ${activeAgents ? "" : `<div class="notice" style="margin-top:8px">No call agents yet, so calls come to you. <button class="btn small" data-view="team">Add agents</button></div>`}
       </div>
       ${callSections(all)}
@@ -222,9 +225,8 @@ function openBookCall() {
   sheet(`<h3>📞 ${existing ? "Move the call with" : "Book a call with"} ${esc(personName(S.open))}</h3>
     <label class="chat-sub">Who calls</label>
     <select class="field" id="book-agent">
-      <option value="auto">Next free agent</option>
+      <option value="auto">🟢 Open list (or their agent, if they have one)</option>
       ${S.agents.filter((a) => a.active).map((a) => `<option value="${a.id}" ${existing?.agent_id === a.id ? "selected" : ""}>👤 ${esc(a.name)}</option>`).join("")}
-      <option value="">Me</option>
     </select>
     <div style="height:8px"></div>
     <label class="chat-sub">When</label>
@@ -251,7 +253,7 @@ async function saveBooking(t) {
       summary: $("#book-summary").value,
     });
     closeSheet();
-    toast(res.agent ? `Booked with ${res.agent}. They've been alerted.` : "Booked. You'll get the alert.");
+    toast(res.agent ? `Booked with ${res.agent}. They've been alerted.` : "Booked on the open list. Every agent has been alerted.");
     await refreshCalls();
   } catch (e) {
     t.disabled = false;
@@ -267,7 +269,7 @@ async function cancelCall(t) {
 async function assignCall(id, agentId) {
   try {
     await post("call-assign", { id: Number(id), agent_id: agentId ? Number(agentId) : null });
-    toast(agentId ? `Given to ${agentName(Number(agentId))}. They've been alerted.` : "Unassigned");
+    toast(agentId ? `Given to ${agentName(Number(agentId))} for 7 days. They've been alerted.` : "Back on the open list. Every agent has been alerted.");
     await refreshCalls();
   } catch (e) { if (e.message !== "unauthorized") toast(e.message); }
 }
@@ -276,7 +278,7 @@ async function assignCall(id, agentId) {
 function callBanner(waId) {
   const call = openCallFor(waId);
   if (!call) return "";
-  return `<div class="banner"><span class="tag hot">📞 Call</span> ${esc(callIsDue(call) ? "due now" : endsLabel(new Date(call.due_at)))} · ${esc(call.agent_id ? agentName(call.agent_id) : "no agent")}
+  return `<div class="banner"><span class="tag hot">📞 Call</span> ${esc(callIsDue(call) ? "due now" : endsLabel(new Date(call.due_at)))} · ${esc(call.agent_id ? agentName(call.agent_id) : "open list")}
     <span style="margin-left:auto;display:flex;gap:6px"><button class="btn small" data-action="book-call">Move</button><button class="btn small primary" data-action="call-result" data-id="${call.id}">Log result</button></span></div>`;
 }
 
@@ -477,18 +479,24 @@ function lostReasonsHtml() {
 
 // ---------- the call agent's CRM ----------
 function hydrateAgent(d) {
-  // A new call for this agent: sound + banner, even if they're on another screen.
+  // A new call for this agent, or a new lead on the open list: sound + banner, even if they're on another screen.
   const booked = (d.calls || []).filter((c) => c.status === "booked").map((c) => c.id);
+  const pool = d.pool || [];
   if (S.role === "agent" && S.knownCalls) {
-    const fresh = booked.filter((id) => !S.knownCalls.has(id));
-    if (fresh.length) {
+    const fresh = booked.filter((id) => !S.knownCalls.has(id) && !S.knownPool?.has(id));
+    const freshPool = pool.filter((p) => !S.knownPool?.has(p.id));
+    if (fresh.length || freshPool.length) {
       const c = (d.calls || []).find((x) => x.id === fresh[0]);
       const who = (d.leads || []).find((l) => l.wa_id === c?.wa_id)?.name || (d.contacts || []).find((x) => x.wa_id === c?.wa_id)?.name || "a customer";
       ding(); try { navigator.vibrate?.([200, 100, 200]); } catch {}
-      toast(`📞 New call: ${who}`);
+      toast(fresh.length ? `📞 New call: ${who}` : `🔔 New lead to take: ${freshPool[0].name}`);
     }
   }
   S.knownCalls = new Set(booked);
+  S.knownPool = new Set(pool.map((p) => p.id));
+  S.pool = pool;
+  S.claimDays = d.claimDays || 7;
+  S.claimMinutes = d.claimMinutes || 30;
   S.role = "agent";
   S.forms = d.forms || {};
   S.previews = new Map((d.previews || []).map((p) => [p.wa_id, p]));
@@ -511,15 +519,47 @@ function renderMyCalls() {
   const today0 = new Date(new Date().toDateString());
   const dueNow = list.filter((c) => c.status === "booked" && callIsDue(c)).length;
   const doneToday = list.filter((c) => c.status !== "booked" && c.completed_at && new Date(c.completed_at) >= today0).length;
+  const pool = S.pool || [];
   $("#main").innerHTML = `<div class="page"><div class="page-inner narrow">
     <div class="myday">
+      <div class="stat"><b>${pool.length}</b><span>To take</span></div>
       <div class="stat"><b>${dueNow}</b><span>Call now</span></div>
       <div class="stat"><b>${doneToday}</b><span>Done today</span></div>
       <div class="stat"><b>${naira(S.owed)}</b><span>Owed to you</span></div>
     </div>
     ${milestoneHtml(S.monthTotal || 0, S.me?.commission_pct)}
+    <div class="qsection">Open list: first to take it gets it (${pool.length})</div>
+    <div class="chat-sub" style="margin:0 2px 8px">Tap <b>Take it</b> and the client is yours for ${S.claimDays} days. Log a result within ${S.claimMinutes} minutes of the call time, or it goes back on the list.</div>
+    ${pool.map(poolCard).join("") || `<div class="empty" style="padding:16px">No open leads right now. You'll get an alert when one comes in.</div>`}
     ${callSections(list)}
   </div></div>`;
+}
+
+// A lead on the open list: enough to decide, but no number until they take it.
+function poolCard(p) {
+  const due = new Date(p.due_at);
+  const dueTxt = callIsDue(p) ? "Ready now" : esc(endsLabel(due));
+  const factHtml = factsHtml(formFactsFrom(p.form, p.lead || {}));
+  return `<div class="ccard pool">
+    <div class="ccard-top">
+      <strong class="ccard-name">${esc(p.name)}</strong> ${tierTag(p.lead)}
+      <span class="when ${callIsDue(p) ? "urgent" : ""}" style="margin-left:auto">${dueTxt}</span>
+    </div>
+    ${factHtml ? `<div class="facts">${factHtml}</div>` : ""}
+    ${p.summary ? `<div class="ccard-sum">📝 ${esc(p.summary)}</div>` : ""}
+    ${p.preferred_time ? `<div class="chat-sub">They said: “${esc(p.preferred_time)}”</div>` : ""}
+    <div class="ccard-actions"><button class="btn big primary" data-action="claim" data-id="${p.id}">🙋 Take it</button></div>
+  </div>`;
+}
+async function claimCall(t) {
+  t.disabled = true;
+  try {
+    const res = await post("claim", { id: Number(t.dataset.id) });
+    toast(res.message || "It's yours. Call now.");
+  } catch (e) {
+    if (e.message !== "unauthorized") toast(e.message);
+  }
+  await refreshCalls();
 }
 function renderMyDone() {
   const done = callsList().filter((c) => c.status !== "booked").sort((a, b) => new Date(b.completed_at || b.updated_at) - new Date(a.completed_at || a.updated_at));
@@ -565,7 +605,7 @@ const CALL_ACTIONS = {
   "call-result": openCallResult, "pick-outcome": pickOutcome, "save-outcome": saveOutcome,
   "set-callback": (t) => { $("#outcome-at").value = t.dataset.id; },
   "book-call": openBookCall, "save-booking": saveBooking, "set-book-time": (t) => { $("#book-at").value = t.dataset.id; },
-  "cancel-call": cancelCall, "chat-view": (t) => openChatSheet(t.dataset.id),
+  "cancel-call": cancelCall, "chat-view": (t) => openChatSheet(t.dataset.id), claim: claimCall,
   "add-agent": addAgent, "agent-code": newCode, "agent-toggle": toggleAgent, "agent-payout": recordPayout,
   "copy-code": (t) => { navigator.clipboard?.writeText(t.dataset.id).then(() => toast("Copied"), () => {}); },
   onboard: openOnboarding, "save-onboard": saveOnboarding,

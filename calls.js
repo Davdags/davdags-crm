@@ -141,7 +141,7 @@ function renderCalls() {
     <div class="page"><div class="page-inner narrow">
       <div class="criteria" style="margin-bottom:6px">
         <strong>How calls work</strong>
-        <div class="chat-sub" style="margin-top:4px">The bot books a call when a lead agrees to talk or goes quiet for 30 minutes. New calls go on the <b>open list</b> and every agent gets an alert. The first to tap <b>Take it</b> gets the client for 7 days, but must log a result within 30 minutes or it goes back on the list. Repeat calls with that client go straight to them. Paying clients stay with the agent who closed them. On ✅ Agreed the customer automatically gets a recap with the bank details. To take calls yourself, add yourself on the Team page and log in with your own code.</div>
+        <div class="chat-sub" style="margin-top:4px">The bot books a call when a lead agrees to talk or goes quiet for 30 minutes. New calls go on the <b>open list</b> and every agent gets an alert. The first to tap <b>Take it</b> gets the client for 14 days, but must log a result within 30 minutes or it goes back on the list. Repeat calls with that client go straight to them. Paying clients stay with the agent who closed them. On ✅ Agreed the customer automatically gets a recap with the bank details. To take calls yourself, add yourself on the Team page and log in with your own code.</div>
         ${activeAgents ? "" : `<div class="notice" style="margin-top:8px">No call agents yet, so calls come to you. <button class="btn small" data-view="team">Add agents</button></div>`}
       </div>
       ${callSections(all)}
@@ -269,7 +269,7 @@ async function cancelCall(t) {
 async function assignCall(id, agentId) {
   try {
     await post("call-assign", { id: Number(id), agent_id: agentId ? Number(agentId) : null });
-    toast(agentId ? `Given to ${agentName(Number(agentId))} for 7 days. They've been alerted.` : "Back on the open list. Every agent has been alerted.");
+    toast(agentId ? `Given to ${agentName(Number(agentId))} for 14 days. They've been alerted.` : "Back on the open list. Every agent has been alerted.");
     await refreshCalls();
   } catch (e) { if (e.message !== "unauthorized") toast(e.message); }
 }
@@ -495,7 +495,7 @@ function hydrateAgent(d) {
   S.knownCalls = new Set(booked);
   S.knownPool = new Set(pool.map((p) => p.id));
   S.pool = pool;
-  S.claimDays = d.claimDays || 7;
+  S.claimDays = d.claimDays || 14;
   S.claimMinutes = d.claimMinutes || 30;
   S.role = "agent";
   S.forms = d.forms || {};

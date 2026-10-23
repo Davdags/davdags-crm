@@ -197,7 +197,7 @@ const dirty = () => { allCache = null; contactsCache = null; };
 const blocked = (c) => c.opted_out && c.handoff_reason === "Blocked";
 // Set by the bot when someone asks for money or writes in another language; it then stops using AI on them
 // (see isMoneyRequest / looksForeign in index.ts).
-const BOT_FLAGS = { "Asked for money": "🚫 Money", "Not English": "🌍 Not English", "One-word replies": "💤 Only says ok" };
+const BOT_FLAGS = { "Asked for money": "🚫 Money", "Not English": "🌍 Not English", "One-word replies": "💤 Only says ok", "Not serious": "⛔ Not serious" };
 const moneySeeker = (c) => !!BOT_FLAGS[c.lead?.lost_reason];
 const unread = (c) => !c.isOwner && c.lastCustomerAt && (!S.seen[c.wa_id] || new Date(c.lastCustomerAt) > new Date(S.seen[c.wa_id]));
 function hasLead(c) {
@@ -639,7 +639,7 @@ function renderChatParts({ keepComposer }) {
     const due = S.reminders.filter((r) => r.wa_id === c.wa_id && !r.done);
     banners.innerHTML = `
       ${c.isOwner ? "" : qualityLine(c)}
-      ${moneySeeker(c) ? `<div class="banner danger"><span class="tag need">${BOT_FLAGS[l.lost_reason]}</span> ${l.lost_reason === "Not English" ? "Wrote in another language. The bot sent one fixed \"please write in English\" reply and stays quiet (no AI credit used) until they write in English." : l.lost_reason === "One-word replies" ? "Only answers \"ok\"/\"yes\". The bot asked them once to say what their business does and stays quiet (no AI credit used) until they write something real. No call is booked for them." : "Asked for money. The bot sent one fixed \"we can't help with money\" reply and now ignores this chat, so no AI credit is used."} <button class="btn small" style="margin-left:auto" data-action="unmute">Let the bot reply again</button></div>` : ""}
+      ${moneySeeker(c) ? `<div class="banner danger"><span class="tag need">${BOT_FLAGS[l.lost_reason]}</span> ${l.lost_reason === "Not English" ? "Wrote in another language. The bot sent one fixed \"please write in English\" reply and stays quiet (no AI credit used) until they write in English." : l.lost_reason === "One-word replies" ? "Only answers \"ok\"/\"yes\". The bot asked them once to say what their business does and stays quiet (no AI credit used) until they write something real. No call is booked for them." : l.lost_reason === "Not serious" ? "Blacklisted: sent emojis or love/nonsense messages without saying anything about a business. The bot never replies to them (no AI credit used)." : "Asked for money. The bot sent one fixed \"we can't help with money\" reply and now ignores this chat, so no AI credit is used."} <button class="btn small" style="margin-left:auto" data-action="unmute">Let the bot reply again</button></div>` : ""}
       ${callBanner(c.wa_id)}
       ${previewBanner(c.wa_id)}
       ${c.flagged ? `<div class="banner danger"><span class="tag need">⚠ Flagged</span> Sent what looks like a bank account or phone number: “${esc(c.flagged)}”. Often someone expecting money.</div>` : ""}
